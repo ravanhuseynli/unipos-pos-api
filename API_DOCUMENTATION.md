@@ -1,0 +1,696 @@
+# UniPOS Node JS API Documentation
+
+## Introduction
+Welcome to the UniPOS API documentation. This API serves as the backend for the UniPOS system, supporting both the Admin Panel and POS Terminals. It provides endpoints for authentication, order management, point-of-sale functionality, product management, and more.
+
+**Base URL**: `http://<your-server>/api`
+**Current Version**: `1.0.0`
+**Content Type**: All requests and responses should use `application/json`.
+
+---
+
+## Authentication & Authorization
+The API uses JSON Web Tokens (JWT) for authentication where required. However, many endpoints (e.g., POS or Order creation) are currently public and do not enforce authentication middleware, though they may require `profileId` or specific identifiers in the request body.
+
+Where a token is required, include it in the `Authorization` header using the Bearer schema:
+```http
+Authorization: Bearer <your_jwt_token>
+```
+
+---
+
+## Rate Limiting
+To ensure service stability, rate limiting is applied to all `/api` routes:
+- **Window**: 15 minutes
+- **Max limit**: 3000 requests per IP address
+
+If the limit is exceeded, the server returns a `429 Too Many Requests` status with the message: 
+`"Çox çox sorğu göndərdiniz. Zəhmət olmasa bir az gözləyin."`
+
+---
+
+## 1. Authentication Endpoints
+
+### 1.1 Admin Login
+Authenticate an admin user and receive a JWT token.
+
+- **URL**: `/auth/login`
+- **Method**: `POST`
+- **Auth Required**: No
+
+**Request Body**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `username` | string | Yes | Administrator username. |
+| `password` | string | Yes | Administrator password. |
+
+**Example Request**:
+```json
+{
+  "username": "admin",
+  "password": "password123"
+}
+```
+
+**Success Response (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "Uğurla daxil oldunuz!",
+  "data": {
+    "token": "eyJhbG...",
+    "user": {
+      "id": 1,
+      "username": "admin",
+      "restaurant_name": "My Restaurant",
+      "logo": "logo.png",
+      "is_pos": 1,
+      "is_menu": 1
+    }
+  }
+}
+```
+
+**Error Responses**:
+- `400 Bad Request`: "İstifadəçi adı və şifrə tələb olunur." (Missing fields)
+- `401 Unauthorized`: "İstifadəçi adı və ya şifrə yanlışdır." (Invalid credentials)
+- `403 Forbidden`: "Hesabınız aktiv deyil. Zəhmət olmasa dəstək xidməti ilə əlaqə saxlayın." (Account inactive)
+
+### 1.2 Get Current Admin Profile
+Retrieve information about the currently authenticated admin.
+
+- **URL**: `/auth/me`
+- **Method**: `GET`
+- **Auth Required**: Yes (Bearer Token)
+
+**Success Response (200 OK)**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "username": "admin",
+    "restaurant_name": "My Restaurant",
+    "logo": "logo.png",
+    "boss_name": "John Doe",
+    "boss_phone_number": "+1234567890",
+    "region": "Baku",
+    "email": "admin@example.com",
+    "phone": "+1234567890",
+    "address": "Baku, Azerbaijan",
+    "is_working": 1,
+    "is_pos": 1,
+    "is_menu": 1,
+    "is_tax": 1,
+    "service_fee": 10,
+    "tax_percent": 18
+  }
+}
+```
+**Error Responses**:
+- `404 Not Found`: "İstifadəçi tapılmadı." (User not found)
+
+---
+
+## 2. Terminal Endpoints
+
+### 2.1 Terminal Login
+Authenticate a POS terminal and receive a JWT token.
+
+- **URL**: `/terminal/login`
+- **Method**: `POST`
+- **Auth Required**: No
+
+**Request Body**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `username` | string | Yes | Associated profile/admin username. |
+| `terminal_id` | string | Yes | The ID of the terminal to login. |
+| `terminal_password` | string | Yes | The password for the specific terminal. |
+
+**Example Request**:
+```json
+{
+  "username": "admin",
+  "terminal_id": "TERM_01",
+  "terminal_password": "tpass"
+}
+```
+
+**Success Response (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "Terminal uğurla daxil oldu!",
+  "data": {
+    "token": "eyJhbG...",
+    "profile": {
+      "id": 1,
+      "username": "admin",
+      "restaurant_name": "My Restaurant",
+      "logo": "logo.png",
+      "is_pos": 1,
+      "is_menu": 1
+    },
+    "terminal": {
+      "id": 5,
+      "terminal_id": "TERM_01",
+      "is_master": 1
+    }
+  }
+}
+```
+**Error Responses**:
+- `400 Bad Request`: "İstifadəçi adı, terminal ID və terminal şifrəsi tələb olunur."
+- `401 Unauthorized`: "İstifadəçi tapılmadı." OR "Terminal ID və ya şifrə yanlışdır."
+- `403 Forbidden`: "Hesab aktiv deyil. Dəstək xidməti ilə əlaqə saxlayın."
+
+### 2.2 Get Terminal Info
+Retrieve information about all terminals under a specific profile.
+
+- **URL**: `/terminal/me/:profileId`
+- **Method**: `GET`
+- **Auth Required**: No
+
+**URL Parameters**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `profileId` | integer | Yes | ID of the parent profile (restaurant/admin). |
+
+**Success Response (200 OK)**:
+```json
+{
+  "success": true,
+  "data": {
+    "profile": {
+      "id": 1,
+      "username": "admin",
+      "restaurant_name": "My Restaurant"
+      // Profile details...
+    },
+    "terminals": [
+      {
+        "id": 5,
+        "profile_id": 1,
+        "terminal_id": "TERM_01",
+        "terminal_password": "tpass",
+        "is_master": 1
+      }
+    ]
+  }
+}
+```
+**Error Responses**:
+- `400 Bad Request`: "Profile ID tələb olunur."
+- `404 Not Found`: "Profil tapılmadı."
+
+---
+
+## 3. Product Endpoints
+
+### 3.1 Get All Products
+Retrieve all products for a profile, ordered by sorting config.
+
+- **URL**: `/products/:profileId`
+- **Method**: `GET`
+- **Auth Required**: No
+
+**URL Parameters**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `profileId` | integer/string | Yes | Parent profile ID or Username. |
+
+**Success Response (200 OK)**:
+```json
+{
+  "success": true,
+  "count": 50,
+  "data": [
+    {
+      "id": 1,
+      "profile_id": 1,
+      "category_id": 2,
+      "name": "Margarita Pizza",
+      "price": 12.00,
+      "img": "pizza.png",
+      "is_hidden_pos": 0
+    }
+  ]
+}
+```
+
+### 3.2 Get Product by ID
+Retrieve a specific product by its ID under a specific profile.
+
+- **URL**: `/products/:profileId/:id`
+- **Method**: `GET`
+- **Auth Required**: No
+
+**URL Parameters**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `profileId` | integer/string | Yes | Profile ID or Username. |
+| `id`       | integer | Yes | Product ID to fetch. |
+
+**Success Response (200 OK)**: Returns a single product object.
+- `404 Not Found`: "Məhsul tapılmadı."
+
+### 3.3 Get Products by Category
+Retrieve all products belonging to a specific category.
+
+- **URL**: `/products/:profileId/category/:categoryId`
+- **Method**: `GET`
+
+---
+
+## 4. Tables and Halls Endpoints
+
+### 4.1 Get Halls (Table Groups)
+Retrieve all logical halls configured for a profile.
+
+- **URL**: `/tables/halls/:profileId`
+- **Method**: `GET`
+
+### 4.2 Get Halls With Tables
+Retrieve all halls nested with their respective tables grouping.
+
+- **URL**: `/tables/halls/:profileId/with-tables`
+- **Method**: `GET`
+
+### 4.3 Get Tables by Profile
+- **URL**: `/tables/:profileId`
+- **Method**: `GET`
+
+### 4.4 Get Tables by Hall
+- **URL**: `/tables/hall/:hallId`
+- **Method**: `GET`
+
+---
+
+## 5. Waiter Endpoints
+
+### 5.1 Get Waiters by Profile
+Retrieve a list of waiters registered under a specific profile.
+
+- **URL**: `/waiters/:profileId`
+- **Method**: `GET`
+
+### 5.2 Get Waiter by ID
+Retrieve specific waiter details.
+
+- **URL**: `/waiters/single/:id`
+- **Method**: `GET`
+
+---
+
+## 6. Point of Sale (POS) Endpoints
+
+These endpoints provide necessary reference data and functionality for POS terminals. All endpoints are public (no JWT required).
+
+### 6.1 Get Printers
+Retrieve all printers or cash printers for a profile.
+- **All Printers URL**: `/pos/printers/:profileId` (GET)
+- **Cash Printers URL**: `/pos/cash-printers/:profileId` (GET)
+
+### 6.2 Get Hierarchy & Menu
+- **Categories**: `/pos/categories/:profileId` (GET) - *profileId can be ID or Username*
+- **General Categories**: `/pos/general-categories/:profileId` (GET) - *profileId can be ID or Username*
+- **Menu Structure**: `/pos/menu/:profileId` (GET) - Returns a fully nested menu.
+
+#### QR menu appearance
+
+The `profile` object carries two optional fields that control how the QR menu
+renders. Both are nullable; the QR app silently falls back to its defaults
+(`komur` / `yumsaq`) when a value is missing or unrecognised, so a typo can never
+take a menu down — and adding a new theme later needs no change to this API.
+
+```json
+"profile": {
+  "theme": "terrakota",
+  "menu_style": "siyahi"
+}
+```
+
+| Field | Values |
+|---|---|
+| `theme` | `komur` `terrakota` `mese` `gece` `deniz` `sarab` `safran` `nar` `zeytun` `kakao` `fistiq` `badimcan` `mermer` |
+| `menu_style` | `yumsaq` `keskin` `siyahi` `klassik` |
+
+Requires `sql/add_theme_columns.sql`. **Run that migration before deploying** —
+the query selects these columns, so without them every menu request fails.
+
+Only the QR menu reads these fields; POS and mobile clients ignore them.
+
+### 6.3 POS Configuration Lists (GET)
+Retrieve POS configuration lists by Profile ID. All use **GET** method.
+- **Payment Methods**: `/pos/payment-methods/:profileId`
+- **Sale Types**: `/pos/sale-types/:profileId`
+- **Tags**: `/pos/tags/:profileId`
+- **Reasons by Type**: `/pos/reasons/:profileId/:type`
+- **Delete Check Reasons**: `/pos/delete-check-reasons/:profileId`
+- **Return Check Reasons**: `/pos/return-check-reasons/:profileId`
+
+### 6.4 POS Actions (POST)
+
+#### Waiter PIN Auth
+Verify a waiter's PIN code.
+- **URL**: `/pos/waiters-auth`
+- **Method**: `POST`
+- **Request Body**: `{ "pin": "1234", "profileId": 1 }`
+
+#### Get Terminal Profile Info
+Retrieve a specific terminal's profile.
+- **URL**: `/pos/profile`
+- **Method**: `POST`
+- **Request Body**: `{ "restaurantName": "admin", "terminalId": "T1", "terminalPassword": "pass" }`
+
+#### Get Terminals List
+- **URL**: `/pos/terminals`
+- **Method**: `POST`
+- **Request Body**: `{ "profileId": 1 }`
+
+#### Get Active Orders
+Retrieve all currently open/active orders for a profile.
+- **URL**: `/pos/active-orders`
+- **Method**: `POST`
+- **Request Body**: `{ "profileId": 1 }`
+
+### 6.5 Reviews
+- **Create**: `POST /pos/reviews` - Body: `{ "business": "admin_user", "rating": 5, "comment": "Great!" }`
+- **List**: `GET /pos/reviews/:id` (id is profile id)
+
+---
+
+## 7. Order Endpoints
+
+These endpoints handle all operations related to orders/checks, such as creation, item modifications, payments, and splits. All endpoints under `/api/orders` use the **POST** method and require a `profileId` parameter in the request body (or are explicitly tied to an `orderId`). Auth token is not strictly required.
+
+### 7.1 Create Order
+Create a new order and optionally add initial items.
+- **URL**: `/orders`
+- **Method**: `POST`
+
+**Request Body**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `profileId` | integer | Yes | Parent profile ID. |
+| `tableId` | integer | No | ID of the table. |
+| `hallId` | integer | No | ID of the hall. |
+| `waiterId` | integer | No | ID of the waiter opening the order. |
+| `terminalId` | string | No | Terminal creating the order. |
+| `saleType` | integer | No | Type of sale (e.g. dine-in/takeaway). |
+| `note` | string | No | Order note. |
+| `items` | array | No | Initial order items array. `[{"productId": 1, "productName": "Burger", "price": 10.0, "count": 2, "discount": 0}]` |
+
+**Success Response (200 OK)**:
+Returns `orderId`, `uuid`, and `localId`.
+
+### 7.2 Get Order Info
+Retrieve details of a specific order along with its items.
+- **URL**: `/orders/info`
+- **Method**: `POST`
+
+**Request Body**:
+*At least one of `orderId` or `uuid` is required.*
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `profileId` | integer | Yes | Profile ID. |
+| `orderId` | integer | No | Internal Order ID. |
+| `uuid` | string | No | Globally unique identifier. |
+
+### 7.3 Get Active Orders
+List all active/open orders.
+- **URL**: `/orders/active`
+- **Method**: `POST`
+- **Request Body**: `{ "profileId": 1 }`
+
+### 7.4 Get All Orders (Filtered)
+List all orders, allowing filtering by status, date and waiter.
+- **URL**: `/orders/all`
+- **Method**: `POST`
+
+**Request Body**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `profileId` | integer | Yes | Profile ID. |
+| `status` | integer | No | Filter by status (e.g., 1 for active, 2 for paid). |
+| `startDate` | string | No | Start date filter (YYYY-MM-DD HH:MM:SS) |
+| `endDate` | string | No | End date filter. |
+| `waiterId` | integer | No | Filter by waiter. |
+| `limit` | integer | No | Max number of records (default 100). |
+
+### 7.5 Update Order
+Add new items, or update `note`, `discount`, or `serviceFee` of an existing order.
+- **URL**: `/orders/update`
+- **Method**: `POST`
+
+**Request Body**:
+Requires `orderId`. Optional parameters: `items` (array), `note`, `discount`, `serviceFee`.
+
+### 7.6 Order Operations
+| Operation | URL | Request Body | Description |
+|-----------|-----|--------------|-------------|
+| Delete Order | `/orders/delete` | `{ "orderId": 1, "reason": "Text", "waiterId": 5 }` | Cancels an order. |
+| Pay Order | `/orders/pay` | `/orders/pay` | `{ "orderId": 1, "paymentMethodId": 1, "paidAmount": 100, "cashReceived": 100, "change": 0, "waiterId": 5 }` | Closes and pays an order. |
+| Update Table | `/orders/update-table` | `{ "orderId": 1, "tableId": 10, "hallId": 2 }` | Moves order to another table. |
+| Update Waiter| `/orders/update-waiter` | `{ "orderId": 1, "waiterId": 4 }` | Changes the assigned waiter. |
+| Update Sale Type | `/orders/update-sale-type`| `{ "orderId": 1, "saleType": 2 }` | Changes sale type. |
+| Reverse Order | `/orders/reverse` | `{ "orderId": 1 }` | Reopens a closed order. |
+| Update Customer | `/orders/update-customer`| `{ "orderId": 1, "customerName": "John", "customerPhone": "123" }` | Attaches customer details. |
+| Delete Item | `/orders/delete-item` | `{ "itemId": 15, "reason": "Cold", "waiterId": 5 }` | Removes an item from the check. |
+
+### 7.7 Advanced Order Transactions
+- **Split Order**: `/orders/split`
+  - Moves specific items to a new order at a specified table.
+  - Body: `{ "orderId": 1, "itemIds": [12, 13], "newTableId": 10, "newHallId": 2, "profileId": 1, "waiterId": 5 }`
+- **Merge Orders**: `/orders/merge`
+  - Merges items from one order into another, closing the source order.
+  - Body: `{ "sourceOrderId": 1, "targetOrderId": 2 }`
+- **Search Orders**: `/orders/search`
+  - Body: `{ "profileId": 1, "query": "123", "searchBy": "id" }` (searchBy can be `id`, `uuid`, or `local_id`).
+
+---
+
+## 8. QR Menu Authentication Endpoints
+
+These endpoints are used by the **QR Menu mobile app** for customer registration and login. Users are stored in the `qr_users` table. Phone numbers must be sent with the `+994` country code prefix (added automatically on the frontend).
+
+> **Token Type**: QR Menu tokens contain `"type": "qr_user"` in the payload and are separate from Admin tokens.
+
+### 8.1 QR Menu Register (Qeydiyyat)
+Register a new QR menu customer account.
+
+- **URL**: `/qr-auth/register`
+- **Method**: `POST`
+- **Auth Required**: No
+
+**Request Body**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `ad` | string | Yes | Customer's first name (min. 2 characters). |
+| `soyad` | string | Yes | Customer's last name (min. 2 characters). |
+| `nomre` | string | Yes | Phone number in `+994XXXXXXXXX` format (9 digits after +994). |
+| `sifre` | string | Yes | Password (min. 6 characters). Stored as bcrypt hash. |
+
+**Example Request**:
+```json
+{
+  "ad": "Ravan",
+  "soyad": "Hüseynli",
+  "nomre": "+994501234567",
+  "sifre": "123456"
+}
+```
+
+**Success Response (201 Created)**:
+```json
+{
+  "success": true,
+  "message": "Qeydiyyat uğurla tamamlandı!",
+  "data": {
+    "token": "eyJhbG...",
+    "user": {
+      "id": 1,
+      "ad": "Ravan",
+      "soyad": "Hüseynli",
+      "nomre": "+994501234567"
+    }
+  }
+}
+```
+
+**Error Responses**:
+| Status | Message | Cause |
+|--------|---------|-------|
+| `400` | "Ad, soyad, nömrə və şifrə tələb olunur." | Missing fields |
+| `400` | "Ad ən azı 2 simvol olmalıdır." | First name too short |
+| `400` | "Soyad ən azı 2 simvol olmalıdır." | Last name too short |
+| `400` | "Telefon nömrəsi düzgün formatda deyil. (+994XXXXXXXXX)" | Invalid phone format |
+| `400` | "Şifrə ən azı 6 simvol olmalıdır." | Password too short |
+| `409` | "Bu nömrə ilə artıq hesab mövcuddur." | Phone number already registered |
+
+---
+
+### 8.2 QR Menu Login (Daxil ol)
+Authenticate a QR menu customer using phone number and password.
+
+- **URL**: `/qr-auth/login`
+- **Method**: `POST`
+- **Auth Required**: No
+
+**Request Body**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `nomre` | string | Yes | Phone number in `+994XXXXXXXXX` format. |
+| `sifre` | string | Yes | Account password. |
+
+**Example Request**:
+```json
+{
+  "nomre": "+994501234567",
+  "sifre": "123456"
+}
+```
+
+**Success Response (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "Uğurla daxil oldunuz!",
+  "data": {
+    "token": "eyJhbG...",
+    "user": {
+      "id": 1,
+      "ad": "Ravan",
+      "soyad": "Hüseynli",
+      "nomre": "+994501234567"
+    }
+  }
+}
+```
+
+**Error Responses**:
+| Status | Message | Cause |
+|--------|---------|-------|
+| `400` | "Nömrə və şifrə tələb olunur." | Missing fields |
+| `400` | "Telefon nömrəsi düzgün formatda deyil. (+994XXXXXXXXX)" | Invalid phone format |
+| `401` | "Nömrə və ya şifrə yanlışdır." | Wrong phone or password |
+
+---
+
+### 8.3 Get QR Menu User Profile
+Retrieve the currently authenticated QR menu user's profile.
+
+- **URL**: `/qr-auth/me`
+- **Method**: `GET`
+- **Auth Required**: Yes (Bearer Token — QR user token)
+
+**Headers**:
+```http
+Authorization: Bearer <qr_user_jwt_token>
+```
+
+**Success Response (200 OK)**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "ad": "Ravan",
+    "soyad": "Hüseynli",
+    "nomre": "+994501234567",
+    "created_at": "2026-04-12T12:00:00.000Z"
+  }
+}
+```
+
+**Error Responses**:
+| Status | Message | Cause |
+|--------|---------|-------|
+| `401` | "Giriş üçün token tələb olunur." | No token provided |
+| `401` | "Token müddəti bitib. Yenidən daxil olun." | Expired token |
+| `401` | "Token etibarsızdır." | Invalid/malformed token |
+| `403` | "Bu endpointe giriş icazəniz yoxdur." | Token is not a QR user token |
+| `404` | "İstifadəçi tapılmadı." | User deleted from DB |
+
+---
+
+### 8.4 QR Menu Send Review (Rəy göndər)
+Allows an authenticated QR menu user to submit a review for a restaurant. The user's name is automatically prepended to the comment.
+
+- **URL**: `/qr-auth/review`
+- **Method**: `POST`
+- **Auth Required**: Yes (Bearer Token — QR user token)
+
+**Request Body**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `business` | string | Yes | The restaurant username/business name. |
+| `rating` | integer | Yes | Star rating (1-5). |
+| `comment` | string | No | Optional review text. |
+| `profile_id` | integer | No | ID of the restaurant profile. |
+
+**Example Request**:
+```json
+{
+  "business": "admin",
+  "rating": 5,
+  "comment": "Yeməklər çox dadlı idi!",
+  "profile_id": 14
+}
+```
+
+**Success Response (201 Created)**:
+```json
+{
+  "success": true,
+  "message": "Rəyiniz uğurla göndərildi. Təşəkkür edirik!"
+}
+```
+
+**Error Responses**:
+| Status | Message | Cause |
+|--------|---------|-------|
+| `400` | "Zəhmət olmasa qiymətləndirməni seçin və biznes adını qeyd edin." | Missing fields |
+| `401` | "Token müddəti bitib. Yenidən daxil olun." | Expired token |
+
+---
+
+### 8.5 Database Table — `qr_users`
+```sql
+CREATE TABLE IF NOT EXISTS qr_users (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    ad          VARCHAR(100)  NOT NULL,
+    soyad       VARCHAR(100)  NOT NULL,
+    nomre       VARCHAR(20)   NOT NULL UNIQUE,   -- +994XXXXXXXXX format
+    sifre       VARCHAR(255)  NOT NULL,           -- bcrypt hash
+    created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
+
+---
+
+## 9. Error Handling
+
+We use standard HTTP status codes:
+- `200/201`: Success
+- `400`: Bad request (e.g. missing required parameter, shown in message body)
+- `401/403`: Unauthorized / Forbidden (Invalid credentials, tokens or disabled account)
+- `404`: Resource not found (e.g. invalid Product ID or User Profile)
+- `429`: Too Many Requests (Rate limit exceeded)
+- `500`: Internal Server Error (Something went wrong on the server)
+
+Standard Error Format:
+```json
+{
+  "success": false,
+  "message": "Human-readable error explanation."
+}
+```
+
+*Note: For endpoints that don't enforce `success` prefix flags, they typically return `{ "status": "error", "message": "..." }` or `{ "false": true, "message": "..." }` based on POS integrations.*
+
+---
+**End of Documentation**
+
