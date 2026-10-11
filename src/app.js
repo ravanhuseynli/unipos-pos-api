@@ -1,3 +1,4 @@
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -6,6 +7,7 @@ require('dotenv').config();
 
 const { testConnection } = require('./config/database');
 const routes = require('./routes');
+const { initSocket } = require('./socket');
 
 const app = express();
 
@@ -75,7 +77,11 @@ const startServer = async () => {
     // Test database connection first
     await testConnection();
 
-    app.listen(PORT, () => {
+    // Socket (QR sifarişi) eyni port üzərində işləyir: /socket.io
+    const server = http.createServer(app);
+    initSocket(server);
+
+    server.listen(PORT, () => {
         console.log(`🚀 Server ${PORT} portunda işləyir`);
         console.log(`📍 API: http://localhost:${PORT}/api`);
         console.log(`🔐 Login: POST http://localhost:${PORT}/api/auth/login`);

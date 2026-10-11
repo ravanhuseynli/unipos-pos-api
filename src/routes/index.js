@@ -11,6 +11,7 @@ const posRoutes = require('./pos.routes');
 const orderRoutes = require('./order.routes');
 const modifierRoutes = require('./modifier.routes');
 const qrAuthRoutes = require('./qr_auth.routes');
+const qrOrderRoutes = require('./qr_order.routes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -22,6 +23,7 @@ router.use('/pos', posRoutes);
 router.use('/orders', orderRoutes);
 router.use('/modifiers', modifierRoutes);
 router.use('/qr-auth', qrAuthRoutes);
+router.use('/qr-orders', qrOrderRoutes);
 
 // Health check
 router.get('/health', (req, res) => {
