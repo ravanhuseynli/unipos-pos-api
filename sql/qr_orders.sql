@@ -1,7 +1,9 @@
 -- QR-dan masa sifarişləri (src/services/qrOrder.service.js).
 --
--- ⚠️ BU MİQRASİYA API DEPLOY-DAN ƏVVƏL İŞLƏDİLMƏLİDİR — `POST /api/qr-orders`
---    bu cədvələ yazır.
+-- Server işə düşəndə bu fayl AVTOMATİK işlədilir (src/config/qrSchema.js) —
+-- cədvəl yoxdursa yaradılır, əl ilə işlətmək lazım deyil. Əl ilə yalnız DB
+-- istifadəçisinin CREATE icazəsi olmadıqda lazımdır. Faylda YALNIZ BİR SQL
+-- əmri olmalıdır (pool.query çoxlu əmri qəbul etmir).
 --
 -- Additive: başqa cədvəllərə toxunmur. POS, mobil tətbiq və admin panel bu
 -- cədvəli oxumur. `profiles.is_qr_order_manual` / `is_qr_order_direct`

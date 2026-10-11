@@ -8,6 +8,7 @@ require('dotenv').config();
 const { testConnection } = require('./config/database');
 const routes = require('./routes');
 const { initSocket } = require('./socket');
+const { ensureQrSchema } = require('./config/qrSchema');
 
 const app = express();
 
@@ -76,6 +77,9 @@ const PORT = process.env.PORT || 3000;
 const startServer = async () => {
     // Test database connection first
     await testConnection();
+
+    // QR sifarişinin cədvəli və sütunları — yoxdursa özü yaradılır
+    await ensureQrSchema();
 
     // Socket (QR sifarişi) eyni port üzərində işləyir: /socket.io
     const server = http.createServer(app);
