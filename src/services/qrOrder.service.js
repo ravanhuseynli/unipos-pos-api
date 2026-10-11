@@ -68,10 +68,12 @@ const parsePayload = (value) => (typeof value === 'string' ? JSON.parse(value) :
 /**
  * `is_qr_order_*` sütunlarını superadmin panel əlavə edir. Hələ əlavə olunmayıbsa
  * `SELECT *` xəta vermir, sadəcə sahə olmur — sifariş bağlı sayılır.
+ *
+ * İkisi də 1-dirsə `manual` üstündür — POS da belə seçir (kassirin nəzarəti qalsın).
  */
 const qrOrderMode = (profile) => {
-    if (Number(profile?.is_qr_order_direct) === 1) return 'direct';
     if (Number(profile?.is_qr_order_manual) === 1) return 'manual';
+    if (Number(profile?.is_qr_order_direct) === 1) return 'direct';
     return null;
 };
 
