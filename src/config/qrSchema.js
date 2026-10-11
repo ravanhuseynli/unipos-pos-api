@@ -7,11 +7,12 @@ const { pool } = require('./database');
  * hissə özü yaradılır. Əl ilə SQL işlətmək lazım deyil.
  *
  *   - `qr_orders` cədvəli — `sql/qr_orders.sql`-dən (yeganə mənbə, CREATE TABLE IF NOT EXISTS)
- *   - `profiles.is_qr_order_manual` / `is_qr_order_direct` — superadmin də eyni
- *     sütunları əlavə edir; hansı birinci işə düşsə, o yaradır
+ *   - cədvəl artıq varsa, sonradan əlavə olunan sütunları (QR_ORDER_COLUMNS)
+ *   - `profiles.is_qr_order_*` — superadmin də eyni sütunları əlavə edir; hansı
+ *     birinci işə düşsə, o yaradır
  *
  * Təkrar işə salmaq təhlükəsizdir. İki server nüsxəsi eyni anda ALTER etsə,
- * ikincisinin "sütun artıq var" xətası nəzərə alınmır.
+ * ikincisinin "sütun / indeks artıq var" xətası nəzərə alınmır.
  *
  * ATMIR: alınmasa (məs. DB istifadəçisinin CREATE/ALTER icazəsi yoxdursa) xəta
  * yazılır və server yenə də açılır — POS-un istifadə etdiyi qalan endpoint-lər
@@ -23,24 +24,37 @@ const QR_ORDERS_SQL = path.join(__dirname, '..', '..', 'sql', 'qr_orders.sql');
 const PROFILE_COLUMNS = [
     { name: 'is_qr_order_manual', definition: 'INT NOT NULL DEFAULT 0' },
     { name: 'is_qr_order_direct', definition: 'INT NOT NULL DEFAULT 0' },
+    // Adi menyu QR-ı ilə (masasız) sifariş — qonaq daxil olmalıdır, ofisiant təsdiqləyir
+    { name: 'is_qr_order_no_table', definition: 'INT NOT NULL DEFAULT 0' },
 ];
 
-const ensureProfileColumns = async () => {
+// `sql/qr_orders.sql`-ə sonradan əlavə olunan sütunlar — köhnə cədvəldə də olsun
+const QR_ORDER_COLUMNS = [
+    { name: 'customer_id', definition: 'INT NULL DEFAULT NULL', index: 'idx_qr_orders_customer_created (`customer_id`, `created_at`)' },
+];
+
+const IGNORED_DUPLICATES = new Set(['ER_DUP_FIELDNAME', 'ER_DUP_KEYNAME']);
+
+const ensureColumns = async (table, columns) => {
     const [rows] = await pool.query(
         `SELECT COLUMN_NAME FROM information_schema.COLUMNS
-          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'profiles' AND COLUMN_NAME IN (?)`,
-        [PROFILE_COLUMNS.map((c) => c.name)]
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME IN (?)`,
+        [table, columns.map((c) => c.name)]
     );
     const existing = new Set(rows.map((r) => r.COLUMN_NAME));
 
-    for (const column of PROFILE_COLUMNS) {
+    for (const column of columns) {
         if (existing.has(column.name)) continue;
         try {
             // eslint-disable-next-line no-await-in-loop
-            await pool.query(`ALTER TABLE \`profiles\` ADD COLUMN \`${column.name}\` ${column.definition}`);
-            console.log(`🛠  profiles.${column.name} sütunu əlavə olundu`);
+            await pool.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column.name}\` ${column.definition}`);
+            if (column.index) {
+                // eslint-disable-next-line no-await-in-loop
+                await pool.query(`ALTER TABLE \`${table}\` ADD INDEX ${column.index}`);
+            }
+            console.log(`🛠  ${table}.${column.name} sütunu əlavə olundu`);
         } catch (error) {
-            if (error.code !== 'ER_DUP_FIELDNAME') throw error;
+            if (!IGNORED_DUPLICATES.has(error.code)) throw error;
         }
     }
 };
@@ -50,14 +64,16 @@ const ensureQrOrdersTable = async () => {
         `SELECT COUNT(*) AS found FROM information_schema.TABLES
           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'qr_orders'`
     );
-    if (Number(found)) return;
-    await pool.query(fs.readFileSync(QR_ORDERS_SQL, 'utf8'));
-    console.log('🛠  qr_orders cədvəli yaradıldı');
+    if (!Number(found)) {
+        await pool.query(fs.readFileSync(QR_ORDERS_SQL, 'utf8'));
+        console.log('🛠  qr_orders cədvəli yaradıldı');
+    }
+    await ensureColumns('qr_orders', QR_ORDER_COLUMNS);
 };
 
 async function ensureQrSchema() {
     try {
-        await ensureProfileColumns();
+        await ensureColumns('profiles', PROFILE_COLUMNS);
         await ensureQrOrdersTable();
         console.log('✅ QR sifariş sxemi hazırdır');
     } catch (error) {

@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS `qr_orders` (
   `uuid`         CHAR(36)      NOT NULL,
   `profile_id`   INT           NOT NULL,
   `hall_id`      INT           NOT NULL DEFAULT 0,
-  `table_id`     INT           NOT NULL,
+  `table_id`     INT           NOT NULL COMMENT '0 = masasız sifariş',
   `mode`         VARCHAR(10)   NOT NULL COMMENT 'manual | direct',
   `status`       VARCHAR(12)   NOT NULL DEFAULT 'pending',
   `payload`      JSON          NOT NULL COMMENT 'kassaya göndərilən qr:order:new',
@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS `qr_orders` (
   `check_id`     BIGINT        NULL DEFAULT NULL COMMENT 'kassada açılan çekin nömrəsi',
   `reason`       VARCHAR(255)  NULL DEFAULT NULL,
   `guest_ip`     VARCHAR(45)   NULL DEFAULT NULL,
+  `customer_id`  INT           NULL DEFAULT NULL COMMENT 'qr_users.id — daxil olmuş qonaq',
   `created_at`   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `delivered_at` DATETIME      NULL DEFAULT NULL,
   `resolved_at`  DATETIME      NULL DEFAULT NULL,
@@ -35,5 +36,6 @@ CREATE TABLE IF NOT EXISTS `qr_orders` (
   UNIQUE KEY `uniq_qr_orders_uuid` (`uuid`),
   KEY `idx_qr_orders_profile_status` (`profile_id`, `status`),
   KEY `idx_qr_orders_table_created` (`table_id`, `created_at`),
-  KEY `idx_qr_orders_status_created` (`status`, `created_at`)
+  KEY `idx_qr_orders_status_created` (`status`, `created_at`),
+  KEY `idx_qr_orders_customer_created` (`customer_id`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
