@@ -1,7 +1,7 @@
 const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
 const { pool } = require('../config/database');
 const { verifyTableToken, guestTokenFor } = require('../utils/tableToken');
+const { verifyQrUserToken, QrSessionError } = require('../utils/qrUserToken');
 
 /**
  * QR-dan masa sifarişi (bax: unipos-new-superadmin/docs/QR_ORDER_SOCKET_PLAN.md).
@@ -107,16 +107,15 @@ const allowsNoTable = (profile) => Number(profile?.is_qr_order_manual) === 1;
 const resolveCustomer = async (authHeader) => {
     const match = /^Bearer\s+(.+)$/i.exec(String(authHeader || ''));
     if (!match) return null;
-    let decoded;
+    let user;
     try {
-        decoded = jwt.verify(match[1], process.env.JWT_SECRET);
-    } catch {
-        return null;
+        // Şifrə dəyişəndən sonra köhnə token (digər cihaz) burada da keçmir
+        ({ user } = await verifyQrUserToken(match[1]));
+    } catch (error) {
+        if (error instanceof QrSessionError) return null;
+        throw error;
     }
-    if (decoded?.type !== 'qr_user' || !decoded.id) return null;
-    const [rows] = await pool.execute('SELECT id, ad, soyad, nomre FROM qr_users WHERE id = ? LIMIT 1', [decoded.id]);
-    const user = rows[0];
-    return user ? { id: Number(user.id), name: user.ad, surname: user.soyad, phone: user.nomre } : null;
+    return { id: Number(user.id), name: user.ad, surname: user.soyad, phone: user.nomre };
 };
 
 /** QR tokenindən masanı tapır. Masa başqa zala köçürülübsə, cari zal götürülür. */

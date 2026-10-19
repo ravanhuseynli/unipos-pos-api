@@ -12,6 +12,11 @@ const { ensureQrSchema } = require('./config/qrSchema');
 
 const app = express();
 
+// nginx / reverse proxy arxasında qonağın real IP-si üçün (QR OTP limitləri): TRUST_PROXY=1
+if (process.env.TRUST_PROXY) {
+    app.set('trust proxy', /^\d+$/.test(process.env.TRUST_PROXY) ? Number(process.env.TRUST_PROXY) : process.env.TRUST_PROXY);
+}
+
 // Security middleware
 app.use(helmet());
 

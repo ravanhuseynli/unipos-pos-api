@@ -1,17 +1,86 @@
 const { pool } = require('../config/database');
-const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const { isValidPhone, PHONE_FORMAT_MESSAGE } = require('../utils/phone');
+const { signQrUserToken } = require('../utils/qrUserToken');
+const { sendOtp: sendOtpCode, verifyOtp, markOtpUsed, isOtpRequired, OtpError, PURPOSES } = require('../services/qrOtp.service');
+
+/**
+ * Nömrə limitləri üçün qonağın IP-si. Proxy arxasında `trust proxy` (TRUST_PROXY)
+ * qurulmayıbsa `req.ip` proxy-nin ünvanıdır — hamı bir IP sayılardı və limit hamını
+ * birdən bağlayardı. Həmin halda IP limiti tətbiq olunmur (nömrə limitləri qalır).
+ */
+const clientIp = (req) =>
+    (req.app.get('trust proxy') || !req.headers['x-forwarded-for'] ? String(req.ip || '').replace(/^::ffff:/, '') || null : null);
+
+const otpErrorResponse = (res, error) =>
+    res.status(error.status).json({ success: false, code: error.code, message: error.message, ...error.extra });
+
+/**
+ * @desc    Telefon nömrəsinə təsdiq kodu (WhatsApp)
+ * @route   POST /api/qr-auth/otp/send
+ * @access  Public
+ * Body: { nomre, purpose? = 'register' | 'reset' }
+ *   register — nömrə hələ qeydiyyatda olmamalıdır (409 phone_taken)
+ *   reset    — şifrə bərpası, nömrə ilə hesab olmalıdır (404 phone_not_found)
+ * Cavab: { request_id, expires_in, resend_in, code_length } — request_id növbəti sorğuda geri göndərilir
+ */
+const sendOtp = async (req, res) => {
+    try {
+        const { nomre, purpose = 'register' } = req.body;
+
+        if (!PURPOSES.has(purpose)) {
+            return res.status(400).json({ success: false, message: 'Naməlum təsdiq növü.' });
+        }
+        if (!isValidPhone(nomre)) {
+            return res.status(400).json({ success: false, message: PHONE_FORMAT_MESSAGE });
+        }
+
+        const [existingUser] = await pool.execute('SELECT id FROM qr_users WHERE nomre = ?', [nomre]);
+        if (purpose === 'register' && existingUser.length > 0) {
+            return res.status(409).json({
+                success: false,
+                code: 'phone_taken',
+                message: 'Bu nömrə ilə artıq hesab mövcuddur.'
+            });
+        }
+        if (purpose === 'reset' && existingUser.length === 0) {
+            return res.status(404).json({
+                success: false,
+                code: 'phone_not_found',
+                message: 'Bu nömrə ilə hesab tapılmadı.'
+            });
+        }
+
+        const data = await sendOtpCode({ nomre, purpose, ip: clientIp(req) });
+        return res.status(200).json({
+            success: true,
+            message: 'Təsdiq kodu WhatsApp-a göndərildi.',
+            data
+        });
+
+    } catch (error) {
+        if (error instanceof OtpError) return otpErrorResponse(res, error);
+        console.error('QR SendOtp xətası:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Server xətası baş verdi.'
+        });
+    }
+};
 
 /**
  * @desc    QR Menu İstifadəçi Qeydiyyatı
  * @route   POST /api/qr-auth/register
  * @access  Public
- * Body: { ad, soyad, nomre, sifre }
- * Qeyd: 'nomre' +994 ilə birlikdə frontdan gəlir (məs: +994501234567)
+ * Body: { ad, soyad, nomre, sifre, request_id, kod }
+ * Qeyd: 'nomre' ölkə kodu ilə birlikdə gəlir (məs: +994501234567).
+ * `request_id` + `kod` — POST /otp/send-dən; nömrə təsdiqlənmədən hesab yaradılmır
+ * (QR_OTP_REQUIRED=0 olmadıqda). Kod və hesab eyni tranzaksiyadadır.
  */
 const register = async (req, res) => {
+    let conn;
     try {
-        const { ad, soyad, nomre, sifre } = req.body;
+        const { ad, soyad, nomre, sifre, request_id, kod } = req.body;
 
         // Validation
         if (!ad || !soyad || !nomre || !sifre) {
@@ -36,12 +105,10 @@ const register = async (req, res) => {
             });
         }
 
-        // Phone number validation - must start with +994
-        const phoneRegex = /^\+994[0-9]{9}$/;
-        if (!phoneRegex.test(nomre)) {
+        if (!isValidPhone(nomre)) {
             return res.status(400).json({
                 success: false,
-                message: 'Telefon nömrəsi düzgün formatda deyil. (+994XXXXXXXXX)'
+                message: PHONE_FORMAT_MESSAGE
             });
         }
 
@@ -66,27 +133,37 @@ const register = async (req, res) => {
             });
         }
 
+        const hasOtp = Boolean(request_id || kod);
+        if (isOtpRequired() && !hasOtp) {
+            return res.status(400).json({
+                success: false,
+                code: 'otp_required',
+                message: 'Telefon nömrəsi təsdiqlənməlidir.'
+            });
+        }
+
         // Hash password
         const hashedSifre = await bcrypt.hash(sifre, 10);
 
+        conn = await pool.getConnection();
+        await conn.beginTransaction();
+
+        if (hasOtp) {
+            const otp = await verifyOtp(conn, { requestId: request_id, nomre, code: kod, purpose: 'register' });
+            await markOtpUsed(conn, otp.id);
+        }
+
         // Insert new user
-        const [result] = await pool.execute(
-            'INSERT INTO qr_users (ad, soyad, nomre, sifre) VALUES (?, ?, ?, ?)',
-            [ad.trim(), soyad.trim(), nomre, hashedSifre]
+        const [result] = await conn.execute(
+            'INSERT INTO qr_users (ad, soyad, nomre, sifre, phone_verified_at) VALUES (?, ?, ?, ?, IF(?, NOW(), NULL))',
+            [ad.trim(), soyad.trim(), nomre, hashedSifre, hasOtp ? 1 : 0]
         );
+        await conn.commit();
 
         const newUserId = result.insertId;
 
-        // Generate JWT token
-        const token = jwt.sign(
-            {
-                id: newUserId,
-                nomre,
-                type: 'qr_user'
-            },
-            process.env.JWT_SECRET,
-            { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
-        );
+        // Generate JWT token (yeni hesab — token_version 0)
+        const token = signQrUserToken({ id: newUserId, nomre, token_version: 0 });
 
         return res.status(201).json({
             success: true,
@@ -97,17 +174,32 @@ const register = async (req, res) => {
                     id: newUserId,
                     ad: ad.trim(),
                     soyad: soyad.trim(),
-                    nomre
+                    nomre,
+                    phone_verified: hasOtp
                 }
             }
         });
 
     } catch (error) {
+        if (conn) {
+            // Səhv kodda cəhd sayı yazılmalıdır — əks halda 5 cəhd limiti işləməzdi
+            if (error instanceof OtpError) await conn.commit().catch(() => {});
+            else await conn.rollback().catch(() => {});
+        }
+        if (error instanceof OtpError) return otpErrorResponse(res, error);
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({
+                success: false,
+                message: 'Bu nömrə ilə artıq hesab mövcuddur.'
+            });
+        }
         console.error('QR Register xətası:', error);
         return res.status(500).json({
             success: false,
             message: 'Server xətası baş verdi.'
         });
+    } finally {
+        if (conn) conn.release();
     }
 };
 
@@ -116,7 +208,7 @@ const register = async (req, res) => {
  * @route   POST /api/qr-auth/login
  * @access  Public
  * Body: { nomre, sifre }
- * Qeyd: 'nomre' +994 ilə birlikdə frontdan gəlir (məs: +994501234567)
+ * Qeyd: 'nomre' ölkə kodu ilə birlikdə gəlir (məs: +994501234567)
  */
 const login = async (req, res) => {
     try {
@@ -130,18 +222,16 @@ const login = async (req, res) => {
             });
         }
 
-        // Phone number validation
-        const phoneRegex = /^\+994[0-9]{9}$/;
-        if (!phoneRegex.test(nomre)) {
+        if (!isValidPhone(nomre)) {
             return res.status(400).json({
                 success: false,
-                message: 'Telefon nömrəsi düzgün formatda deyil. (+994XXXXXXXXX)'
+                message: PHONE_FORMAT_MESSAGE
             });
         }
 
         // Find user by phone number
         const [rows] = await pool.execute(
-            'SELECT id, ad, soyad, nomre, sifre FROM qr_users WHERE nomre = ?',
+            'SELECT id, ad, soyad, nomre, sifre, phone_verified_at, token_version FROM qr_users WHERE nomre = ?',
             [nomre]
         );
 
@@ -165,15 +255,7 @@ const login = async (req, res) => {
         }
 
         // Generate JWT token
-        const token = jwt.sign(
-            {
-                id: user.id,
-                nomre: user.nomre,
-                type: 'qr_user'
-            },
-            process.env.JWT_SECRET,
-            { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
-        );
+        const token = signQrUserToken(user);
 
         return res.status(200).json({
             success: true,
@@ -184,7 +266,8 @@ const login = async (req, res) => {
                     id: user.id,
                     ad: user.ad,
                     soyad: user.soyad,
-                    nomre: user.nomre
+                    nomre: user.nomre,
+                    phone_verified: Boolean(user.phone_verified_at)
                 }
             }
         });
@@ -199,6 +282,96 @@ const login = async (req, res) => {
 };
 
 /**
+ * @desc    Şifrə bərpası — "Şifrəni unutdum"
+ * @route   POST /api/qr-auth/password/reset
+ * @access  Public
+ * Body: { nomre, request_id, kod, yeni_sifre }
+ * `request_id` + `kod` — POST /otp/send ({ purpose: 'reset' }) cavabından.
+ * Kod nömrənin sahibi olduğunu sübut edir — ona görə nömrə həm də təsdiqlənmiş sayılır.
+ * Cavab login ilə eynidir ({ token, user }) — qonaq dərhal daxil olur.
+ * token_version artırılır — digər cihazlardakı bütün sessiyalar bitir.
+ */
+const resetPassword = async (req, res) => {
+    let conn;
+    try {
+        const { nomre, request_id, kod, yeni_sifre } = req.body;
+
+        if (!nomre || !request_id || !kod || !yeni_sifre) {
+            return res.status(400).json({
+                success: false,
+                message: 'Nömrə, kod və yeni şifrə tələb olunur.'
+            });
+        }
+        if (!isValidPhone(nomre)) {
+            return res.status(400).json({ success: false, message: PHONE_FORMAT_MESSAGE });
+        }
+        if (typeof yeni_sifre !== 'string' || yeni_sifre.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: 'Yeni şifrə ən azı 6 simvol olmalıdır.'
+            });
+        }
+
+        const hashedSifre = await bcrypt.hash(yeni_sifre, 10);
+
+        conn = await pool.getConnection();
+        await conn.beginTransaction();
+
+        const otp = await verifyOtp(conn, { requestId: request_id, nomre, code: kod, purpose: 'reset' });
+
+        const [rows] = await conn.execute(
+            'SELECT id, ad, soyad, nomre, token_version FROM qr_users WHERE nomre = ? FOR UPDATE',
+            [nomre]
+        );
+        const user = rows[0];
+        if (!user) {
+            await conn.rollback();
+            return res.status(404).json({
+                success: false,
+                code: 'phone_not_found',
+                message: 'Bu nömrə ilə hesab tapılmadı.'
+            });
+        }
+
+        await conn.execute(
+            `UPDATE qr_users
+                SET sifre = ?, token_version = token_version + 1,
+                    phone_verified_at = COALESCE(phone_verified_at, NOW())
+              WHERE id = ?`,
+            [hashedSifre, user.id]
+        );
+        await markOtpUsed(conn, otp.id);
+        await conn.commit();
+
+        const token = signQrUserToken({ ...user, token_version: Number(user.token_version) + 1 });
+
+        return res.status(200).json({
+            success: true,
+            message: 'Şifrə yeniləndi!',
+            data: {
+                token,
+                user: { id: user.id, ad: user.ad, soyad: user.soyad, nomre: user.nomre, phone_verified: true }
+            }
+        });
+
+    } catch (error) {
+        if (conn) {
+            // Səhv kodda cəhd sayı yazılmalıdır — bax: register
+            if (error instanceof OtpError) await conn.commit().catch(() => {});
+            else await conn.rollback().catch(() => {});
+        }
+        if (error instanceof OtpError) return otpErrorResponse(res, error);
+        console.error('QR ResetPassword xətası:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Server xətası baş verdi.'
+        });
+    } finally {
+        if (conn) conn.release();
+    }
+};
+
+/**
  * @desc    QR Menu İstifadəçi Profili
  * @route   GET /api/qr-auth/me
  * @access  Private (JWT token tələb olunur)
@@ -206,7 +379,7 @@ const login = async (req, res) => {
 const getMe = async (req, res) => {
     try {
         const [rows] = await pool.execute(
-            'SELECT id, ad, soyad, nomre, created_at FROM qr_users WHERE id = ?',
+            'SELECT id, ad, soyad, nomre, phone_verified_at IS NOT NULL AS phone_verified, created_at FROM qr_users WHERE id = ?',
             [req.qrUser.id]
         );
 
@@ -219,7 +392,7 @@ const getMe = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            data: rows[0]
+            data: { ...rows[0], phone_verified: Boolean(rows[0].phone_verified) }
         });
 
     } catch (error) {
@@ -237,6 +410,8 @@ const getMe = async (req, res) => {
  * @access  Private (JWT token tələb olunur)
  * Body: { ad?, soyad?, yeni_sifre?, kohne_sifre? }
  * Qeyd: nomre dəyişdirilmir
+ * Şifrə dəyişəndə token_version artırılır — digər cihazlardakı sessiyalar bitir;
+ * bu cihaz üçün yeni token cavabın kökündə qaytarılır (`token`).
  */
 const updateProfile = async (req, res) => {
     try {
@@ -320,7 +495,8 @@ const updateProfile = async (req, res) => {
         const fields = Object.keys(updates);
         const values = Object.values(updates);
 
-        const setClause = fields.map(f => `${f} = ?`).join(', ');
+        let setClause = fields.map(f => `${f} = ?`).join(', ');
+        if (updates.sifre) setClause += ', token_version = token_version + 1';
         await pool.execute(
             `UPDATE qr_users SET ${setClause} WHERE id = ?`,
             [...values, userId]
@@ -328,14 +504,17 @@ const updateProfile = async (req, res) => {
 
         // Return updated user (without sifre)
         const [updated] = await pool.execute(
-            'SELECT id, ad, soyad, nomre, created_at FROM qr_users WHERE id = ?',
+            'SELECT id, ad, soyad, nomre, phone_verified_at IS NOT NULL AS phone_verified, token_version, created_at FROM qr_users WHERE id = ?',
             [userId]
         );
+        const { token_version, ...user } = updated[0];
 
         return res.status(200).json({
             success: true,
             message: 'Profil uğurla yeniləndi!',
-            data: updated[0]
+            data: { ...user, phone_verified: Boolean(user.phone_verified) },
+            // Şifrə dəyişibsə köhnə token artıq keçmir — klient bunu saxlamalıdır
+            ...(updates.sifre ? { token: signQrUserToken({ id: user.id, nomre: user.nomre, token_version }) } : {})
         });
 
     } catch (error) {
@@ -409,8 +588,10 @@ const sendReview = async (req, res) => {
 };
 
 module.exports = {
+    sendOtp,
     register,
     login,
+    resetPassword,
     getMe,
     updateProfile,
     sendReview

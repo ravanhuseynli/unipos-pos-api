@@ -473,12 +473,56 @@ Requires `orderId`. Optional parameters: `items` (array), `note`, `discount`, `s
 
 ## 8. QR Menu Authentication Endpoints
 
-These endpoints are used by the **QR Menu mobile app** for customer registration and login. Users are stored in the `qr_users` table. Phone numbers must be sent with the `+994` country code prefix (added automatically on the frontend).
+These endpoints are used by the **QR Menu mobile app** for customer registration and login. Users are stored in the `qr_users` table. Phone numbers are sent in international E.164 format with the country code (`+994501234567`, `+905321234567`); the QR menu has a country picker. `+994` numbers must have exactly 9 digits after the code.
+
+Phone ownership is verified with a **6-digit code sent via WhatsApp** (see 8.0). Registration and password reset both require it.
 
 > **Token Type**: QR Menu tokens contain `"type": "qr_user"` in the payload and are separate from Admin tokens.
 
+> **Sessions end on password change**: tokens carry `tv` (= `qr_users.token_version`). A password change (`PUT /qr-auth/update`) or reset (8.6) increments the version, so every older token — other devices included — is rejected with `401` and `code: "session_revoked"`. The device that changed the password gets a fresh `token` in the response. Tokens issued before this feature have no `tv` and count as version 0, so they stay valid until the first password change.
+
+### 8.0 Send Verification Code (WhatsApp OTP)
+Sends a 6-digit code to the phone number via the WhatsApp bot (`WHATSAPP_BOT_URL`, `POST /send-otp`).
+
+- **URL**: `/qr-auth/otp/send`
+- **Method**: `POST`
+- **Auth Required**: No
+
+**Request Body**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `nomre` | string | Yes | Phone number in E.164 format. |
+| `purpose` | string | No | `register` (default; number must NOT be registered) or `reset` (number must be registered). |
+
+**Success Response (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "Təsdiq kodu WhatsApp-a göndərildi.",
+  "data": { "request_id": "980aff453c66f48ba8c636625464fb16", "expires_in": 300, "resend_in": 60, "code_length": 6 }
+}
+```
+
+**Security rules**:
+- The code is generated with `crypto.randomInt`; only its HMAC-SHA256 is stored (`QR_OTP_SECRET`). The HMAC includes `request_id`, phone and purpose, so a code is valid only for that request.
+- Valid for 5 minutes, single use. A new code invalidates the previous one.
+- Max 5 wrong attempts per code, then the code is blocked.
+- Send limits: 1 per 60 s and 5 per hour per number; 20 per hour per IP (only when `TRUST_PROXY` is set behind a proxy); `QR_OTP_GLOBAL_HOURLY_LIMIT` (default 300) overall.
+
+**Error Responses** (`code` field is machine-readable):
+| Status | `code` | Cause |
+|--------|--------|-------|
+| `400` | — | Invalid phone format / unknown purpose |
+| `409` | `phone_taken` | `register`: number already has an account |
+| `404` | `phone_not_found` | `reset`: no account with this number |
+| `422` | `not_on_whatsapp` | Number is not registered on WhatsApp |
+| `429` | `otp_too_soon` / `otp_limit` | Rate limit; `retry_after` (seconds) is included |
+| `503` | `otp_unavailable` | WhatsApp bot is down / not configured |
+
+---
+
 ### 8.1 QR Menu Register (Qeydiyyat)
-Register a new QR menu customer account.
+Register a new QR menu customer account. Requires a code from 8.0 (`purpose: "register"`). The code check and account creation happen in one transaction.
 
 - **URL**: `/qr-auth/register`
 - **Method**: `POST`
@@ -489,8 +533,12 @@ Register a new QR menu customer account.
 |-----------|------|----------|-------------|
 | `ad` | string | Yes | Customer's first name (min. 2 characters). |
 | `soyad` | string | Yes | Customer's last name (min. 2 characters). |
-| `nomre` | string | Yes | Phone number in `+994XXXXXXXXX` format (9 digits after +994). |
+| `nomre` | string | Yes | Phone number in E.164 format (e.g. `+994501234567`). |
 | `sifre` | string | Yes | Password (min. 6 characters). Stored as bcrypt hash. |
+| `request_id` | string | Yes* | From 8.0 response. |
+| `kod` | string | Yes* | 6-digit code received on WhatsApp. |
+
+\* Not required only when `QR_OTP_REQUIRED=0` (transition / bot testing).
 
 **Example Request**:
 ```json
@@ -498,7 +546,9 @@ Register a new QR menu customer account.
   "ad": "Ravan",
   "soyad": "Hüseynli",
   "nomre": "+994501234567",
-  "sifre": "123456"
+  "sifre": "123456",
+  "request_id": "980aff453c66f48ba8c636625464fb16",
+  "kod": "553896"
 }
 ```
 
@@ -513,7 +563,8 @@ Register a new QR menu customer account.
       "id": 1,
       "ad": "Ravan",
       "soyad": "Hüseynli",
-      "nomre": "+994501234567"
+      "nomre": "+994501234567",
+      "phone_verified": true
     }
   }
 }
@@ -525,8 +576,11 @@ Register a new QR menu customer account.
 | `400` | "Ad, soyad, nömrə və şifrə tələb olunur." | Missing fields |
 | `400` | "Ad ən azı 2 simvol olmalıdır." | First name too short |
 | `400` | "Soyad ən azı 2 simvol olmalıdır." | Last name too short |
-| `400` | "Telefon nömrəsi düzgün formatda deyil. (+994XXXXXXXXX)" | Invalid phone format |
+| `400` | "Telefon nömrəsi düzgün formatda deyil." | Invalid phone format |
 | `400` | "Şifrə ən azı 6 simvol olmalıdır." | Password too short |
+| `400` | `code: otp_required` | `request_id` / `kod` missing |
+| `400` | `code: otp_wrong` | Wrong code; `attempts_left` included |
+| `400` | `code: otp_blocked` / `otp_expired` / `otp_replaced` / `otp_invalid` | Code can no longer be used — request a new one |
 | `409` | "Bu nömrə ilə artıq hesab mövcuddur." | Phone number already registered |
 
 ---
@@ -662,12 +716,39 @@ CREATE TABLE IF NOT EXISTS qr_users (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     ad          VARCHAR(100)  NOT NULL,
     soyad       VARCHAR(100)  NOT NULL,
-    nomre       VARCHAR(20)   NOT NULL UNIQUE,   -- +994XXXXXXXXX format
+    nomre       VARCHAR(20)   NOT NULL UNIQUE,   -- E.164, e.g. +994501234567
     sifre       VARCHAR(255)  NOT NULL,           -- bcrypt hash
+    phone_verified_at DATETIME NULL,              -- set when verified via WhatsApp code (NULL = old account)
+    token_version INT NOT NULL DEFAULT 0,         -- +1 on password change/reset → older tokens rejected
     created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 ```
+
+`phone_verified_at` and the `qr_phone_otps` table (`sql/qr_phone_otps.sql`) are created automatically on server start (`src/config/qrSchema.js`). `user` objects returned by register / login / me / update include `phone_verified` (boolean).
+
+---
+
+### 8.6 Password Reset (Şifrəni unutdum)
+Sets a new password using a WhatsApp code from 8.0 (`purpose: "reset"`). Also marks the phone as verified. The response is the same as login, so the user is signed in immediately.
+
+- **URL**: `/qr-auth/password/reset`
+- **Method**: `POST`
+- **Auth Required**: No
+
+**Request Body**:
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `nomre` | string | Yes | Phone number (E.164). |
+| `request_id` | string | Yes | From 8.0 response. |
+| `kod` | string | Yes | 6-digit code. |
+| `yeni_sifre` | string | Yes | New password (min. 6 characters). |
+
+**Success Response (200 OK)**: `{ "success": true, "message": "Şifrə yeniləndi!", "data": { "token": "...", "user": { ... } } }`
+
+Errors: the same `otp_*` codes as 8.1, `404 phone_not_found`, `400` for a short password.
+
+> Password change for a signed-in user is `PUT /qr-auth/update` with `kohne_sifre` + `yeni_sifre`. When the password changes, the response also contains a top-level `token` (the old one is revoked) — clients must store it.
 
 ---
 

@@ -1,47 +1,32 @@
-const jwt = require('jsonwebtoken');
+const { verifyQrUserToken, QrSessionError } = require('../utils/qrUserToken');
 
 /**
  * QR Menu istifadəçiləri üçün JWT middleware
- * Token-i yoxlayır və req.qrUser-ə istifadəçi məlumatlarını əlavə edir
+ * Token-i yoxlayır və req.qrUser-ə istifadəçi məlumatlarını əlavə edir.
+ * Şifrə dəyişəndən sonra köhnə tokenlər (digər cihazlar) burada rədd olunur —
+ * bax: utils/qrUserToken.js. Cavabda `code` — klient sessiyanı bağlamaq üçün.
  */
-const qrAuthMiddleware = (req, res, next) => {
-    try {
-        const authHeader = req.headers['authorization'];
+const qrAuthMiddleware = async (req, res, next) => {
+    const authHeader = req.headers['authorization'];
 
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({
-                success: false,
-                message: 'Giriş üçün token tələb olunur.'
-            });
-        }
-
-        const token = authHeader.split(' ')[1];
-
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-        // QR user token-inin olduğunu yoxla
-        if (decoded.type !== 'qr_user') {
-            return res.status(403).json({
-                success: false,
-                message: 'Bu endpointe giriş icazəniz yoxdur.'
-            });
-        }
-
-        req.qrUser = decoded;
-        next();
-
-    } catch (error) {
-        if (error.name === 'TokenExpiredError') {
-            return res.status(401).json({
-                success: false,
-                message: 'Token müddəti bitib. Yenidən daxil olun.'
-            });
-        }
-
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({
             success: false,
-            message: 'Token etibarsızdır.'
+            code: 'token_missing',
+            message: 'Giriş üçün token tələb olunur.'
         });
+    }
+
+    try {
+        const { decoded } = await verifyQrUserToken(authHeader.split(' ')[1]);
+        req.qrUser = decoded;
+        next();
+    } catch (error) {
+        if (error instanceof QrSessionError) {
+            return res.status(error.status).json({ success: false, code: error.code, message: error.message });
+        }
+        console.error('QR auth middleware xətası:', error);
+        return res.status(500).json({ success: false, message: 'Server xətası baş verdi.' });
     }
 };
 

@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { register, login, getMe, updateProfile, sendReview } = require('../controllers/qr_auth.controller');
+const { sendOtp, register, login, resetPassword, getMe, updateProfile, sendReview } = require('../controllers/qr_auth.controller');
 const qrAuthMiddleware = require('../middleware/qr_auth.middleware');
 
 // Public routes
+router.post('/otp/send', sendOtp);
 router.post('/register', register);
 router.post('/login', login);
+router.post('/password/reset', resetPassword);
 
 // Protected routes
 router.get('/me', qrAuthMiddleware, getMe);
