@@ -24,8 +24,6 @@ const QR_ORDERS_SQL = path.join(__dirname, '..', '..', 'sql', 'qr_orders.sql');
 const PROFILE_COLUMNS = [
     { name: 'is_qr_order_manual', definition: 'INT NOT NULL DEFAULT 0' },
     { name: 'is_qr_order_direct', definition: 'INT NOT NULL DEFAULT 0' },
-    // Adi menyu QR-ı ilə (masasız) sifariş — qonaq daxil olmalıdır, ofisiant təsdiqləyir
-    { name: 'is_qr_order_no_table', definition: 'INT NOT NULL DEFAULT 0' },
 ];
 
 // `sql/qr_orders.sql`-ə sonradan əlavə olunan sütunlar — köhnə cədvəldə də olsun

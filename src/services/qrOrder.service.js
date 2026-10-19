@@ -11,8 +11,11 @@ const { verifyTableToken, guestTokenFor } = require('../utils/tableToken');
  *
  * İki növ sifariş:
  *   table    — masa QR-ı (imzalı token). Rejim restoranın icazəsindən: manual / direct
- *   no_table — adi menyu QR-ı (`is_qr_order_no_table`). Qonaq QR menyu hesabı ilə
- *              daxil olmalıdır; rejim HƏMİŞƏ manual — ofisiant masa / gəl-götür seçir
+ *   no_table — adi menyu QR-ı, `is_qr_order_manual` restoranlarda. Qonaq QR menyu
+ *              hesabı ilə daxil olmalıdır; rejim manual — ofisiant təsdiqləyib masa seçir
+ *
+ * POS developeri ilə razılaşma: "manual" = masasız giriş + POS-da təsdiq;
+ * "direct" = masa QR-ı ilə birbaşa masaya. Ayrıca masasız icazəsi yoxdur.
  *
  * Otaqlar (heç vaxt `emit` hamıya getmir):
  *   restaurant:{profileId}         — restoranın bütün kassaları
@@ -94,7 +97,8 @@ const getProfileByUsername = async (username) => {
     return rows[0] || null;
 };
 
-const allowsNoTable = (profile) => Number(profile?.is_qr_order_no_table) === 1;
+// Masasız sifariş manual rejimin özüdür — ofisiant təsdiqləyib masanı seçir
+const allowsNoTable = (profile) => Number(profile?.is_qr_order_manual) === 1;
 
 /**
  * QR menyu hesabı (`Authorization: Bearer <qr_user token>`, bax: qr_auth.controller).
