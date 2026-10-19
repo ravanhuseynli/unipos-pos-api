@@ -30,25 +30,11 @@ const getTable = async (req, res) => {
 };
 
 /**
- * @desc    Adi menyu QR-ı (masasız): restoranda masasız sifariş açıqdırmı, kassa onlayndırmı
- * @route   GET /api/qr-orders/restaurant/:username
- * @access  Public
- */
-const getRestaurant = async (req, res) => {
-    try {
-        const data = await qrOrders.describeRestaurant({ username: req.params.username });
-        res.json({ success: true, data });
-    } catch (error) {
-        handleError(res, error, 'QR restaurant');
-    }
-};
-
-/**
  * @desc    QR-dan sifariş — qiymətlər serverdə hesablanır, kassaya socket ilə gedir
  * @route   POST /api/qr-orders
- * @body    { token?, r, orderUuid?, note?, guestCount?, items: [{ productId, quantity, comment?, modifiers?: [{ id, count }] }] }
- *          `token` yoxdursa masasız sifarişdir — `Authorization: Bearer <qr_user token>` məcburidir
- * @access  Public (masa tokeni imzalıdır / masasızda QR menyu hesabı)
+ * @body    { token, r, orderUuid?, note?, guestCount?, items: [{ productId, quantity, comment?, modifiers?: [{ id, count }] }] }
+ *          `Authorization: Bearer <qr_user token>` istəyə bağlıdır — qonağın adı kassaya gedir
+ * @access  Public (masa tokeni imzalıdır)
  */
 const createOrder = async (req, res) => {
     try {
@@ -82,4 +68,4 @@ const getOrder = async (req, res) => {
     }
 };
 
-module.exports = { getTable, getRestaurant, createOrder, getOrder };
+module.exports = { getTable, createOrder, getOrder };
