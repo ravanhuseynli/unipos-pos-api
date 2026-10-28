@@ -155,7 +155,8 @@ Authenticate a POS terminal and receive a JWT token.
     "terminal": {
       "id": 5,
       "terminal_id": "TERM_01",
-      "is_master": 1
+      "is_master": 1,
+      "terminal_type": null
     }
   }
 }

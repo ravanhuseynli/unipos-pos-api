@@ -9,6 +9,7 @@ const { testConnection } = require('./config/database');
 const routes = require('./routes');
 const { initSocket } = require('./socket');
 const { ensureQrSchema } = require('./config/qrSchema');
+const { ensureTerminalSchema } = require('./config/terminalSchema');
 
 const app = express();
 
@@ -85,6 +86,9 @@ const startServer = async () => {
 
     // QR sifarişinin cədvəli və sütunları — yoxdursa özü yaradılır
     await ensureQrSchema();
+
+    // terminal_groups.terminal_type — yoxdursa özü əlavə olunur
+    await ensureTerminalSchema();
 
     // Socket (QR sifarişi) eyni port üzərində işləyir: /socket.io
     const server = http.createServer(app);

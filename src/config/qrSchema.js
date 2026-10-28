@@ -99,4 +99,4 @@ async function ensureQrSchema() {
     }
 }
 
-module.exports = { ensureQrSchema };
+module.exports = { ensureQrSchema, ensureColumns };

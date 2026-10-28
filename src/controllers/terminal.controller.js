@@ -67,8 +67,9 @@ const terminalLogin = async (req, res) => {
         }
 
         // Find terminal by profile_id, terminal_id and terminal_password
+        // SELECT * — `terminal_type` sütunu hələ yaradılmayıbsa (terminalSchema.js) login sınmasın
         const [terminals] = await pool.execute(
-            'SELECT id, profile_id, terminal_id, terminal_password, is_master FROM terminal_groups WHERE profile_id = ? AND terminal_id = ? AND terminal_password = ?',
+            'SELECT * FROM terminal_groups WHERE profile_id = ? AND terminal_id = ? AND terminal_password = ?',
             [profile.id, terminal_id, terminal_password]
         );
 
@@ -117,7 +118,8 @@ const terminalLogin = async (req, res) => {
                 terminal: {
                     id: terminal.id,
                     terminal_id: terminal.terminal_id,
-                    is_master: terminal.is_master
+                    is_master: terminal.is_master,
+                    terminal_type: terminal.terminal_type ?? null
                 }
             }
         });
