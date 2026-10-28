@@ -154,6 +154,7 @@ const getMenuList = async (req, res) => {
                 ac.username,
                 ac.is_menu,
                 ac.is_menu_block,
+                ac.is_qr_landing,
                 ac.next_payment_date,
                 ac.background_img,
                 ac.address,
@@ -253,6 +254,8 @@ const getMenuList = async (req, res) => {
                 // Superadmin → "Menyu Aktivdir (QR menyu modulu)". 0 olanda QR menyu açılmamalıdır.
                 is_menu: data[0].is_menu,
                 is_menu_block: data[0].is_menu_block,
+                // Superadmin → QR landing səhifəsi. 1 = `/<restoran>` landing göstərir, 0 = birbaşa menyu.
+                is_qr_landing: data[0].is_qr_landing,
                 next_payment_date: data[0].next_payment_date,
                 background_img: data[0].background_img,
                 address: data[0].address,

@@ -342,6 +342,18 @@ the query selects these columns, so without them every menu request fails.
 
 Only the QR menu reads these fields; POS and mobile clients ignore them.
 
+#### QR landing page
+
+`profile.is_qr_landing` — set by the superadmin. `1` (default): the QR menu opens
+the restaurant's landing page at `/<restaurant>`; `0`: it goes straight to the menu.
+The column is created on server start if missing (`src/config/qrSchema.js`).
+
+```json
+"profile": {
+  "is_qr_landing": 1
+}
+```
+
 ### 6.3 POS Configuration Lists (GET)
 Retrieve POS configuration lists by Profile ID. All use **GET** method.
 - **Payment Methods**: `/pos/payment-methods/:profileId`
