@@ -197,7 +197,9 @@ const getMenuList = async (req, res) => {
                 pr.local_name AS printer
             FROM profiles ac
             LEFT JOIN categories c ON c.profile_id = ac.id
-            LEFT JOIN products p ON p.category_id = c.id
+            -- Məhsul da bu restoranın olmalıdır: başqa profilin məhsulu bu profilin
+            -- kateqoriyasına bağlana bilir (kopyalanmış data) — admin API kimi profile_id ilə süzülür
+            LEFT JOIN products p ON p.category_id = c.id AND p.profile_id = ac.id
             LEFT JOIN printers pr ON pr.id = c.printer_id
             WHERE ac.id = ?
               AND (c.is_hidden_qr = 0 OR c.is_hidden_qr IS NULL)
