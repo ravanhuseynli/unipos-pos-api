@@ -16,13 +16,37 @@ const generateUUID = () => {
  */
 
 /**
+ * POS sessiyası varsa restoran tokendən götürülür (body-dəki profileId-ni middleware
+ * onsuz da yoxlayır). Compat rejimində tokensiz sorğu — body-dən, köhnə qayda ilə.
+ */
+const profileIdOf = (req) => req.terminal?.profileId ?? req.body.profileId;
+
+/**
+ * Sessiya varsa sifarişlər bu restoranın olmalıdır — əks halda başqa restoranın
+ * çekini id ilə dəyişmək olurdu. Tokensiz (compat) sorğuda yoxlama yoxdur.
+ * false qaytaranda cavab artıq göndərilib.
+ */
+const ensureOrdersOwned = async (req, res, ...orderIds) => {
+    if (!req.terminal) return true;
+    const ids = [...new Set(orderIds.map(String))];
+    const [[{ owned }]] = await pool.query(
+        'SELECT COUNT(*) AS owned FROM orders WHERE id IN (?) AND profile_id = ?',
+        [ids, req.terminal.profileId]
+    );
+    if (Number(owned) === ids.length) return true;
+    res.json({ status: 'error', message: 'Order not found' });
+    return false;
+};
+
+/**
  * @desc    Create new order/check
  * @route   POST /api/orders
  * @body    { profileId, tableId, hallId, waiterId, terminalId, saleType, items }
  */
 const createOrder = async (req, res) => {
     try {
-        const { profileId, tableId, hallId, waiterId, terminalId, saleType, items, note } = req.body;
+        const { tableId, hallId, waiterId, terminalId, saleType, items, note } = req.body;
+        const profileId = profileIdOf(req);
 
         if (!profileId) {
             return res.json({ status: 'error', message: 'profileId required' });
@@ -68,7 +92,8 @@ const createOrder = async (req, res) => {
  */
 const getOrderInfo = async (req, res) => {
     try {
-        const { orderId, uuid, profileId } = req.body;
+        const { orderId, uuid } = req.body;
+        const profileId = profileIdOf(req);
 
         let query = `
             SELECT o.*, h.name as hall_name, t.name as table_name, w.name as waiter_name
@@ -118,7 +143,7 @@ const getOrderInfo = async (req, res) => {
  */
 const getActiveOrders = async (req, res) => {
     try {
-        const { profileId } = req.body;
+        const profileId = profileIdOf(req);
 
         if (!profileId) {
             return res.json({ status: 'error', message: 'profileId required' });
@@ -148,7 +173,8 @@ const getActiveOrders = async (req, res) => {
  */
 const getAllOrders = async (req, res) => {
     try {
-        const { profileId, status, startDate, endDate, waiterId, limit = 100 } = req.body;
+        const { status, startDate, endDate, waiterId, limit = 100 } = req.body;
+        const profileId = profileIdOf(req);
 
         if (!profileId) {
             return res.json({ status: 'error', message: 'profileId required' });
@@ -203,6 +229,7 @@ const updateOrder = async (req, res) => {
         if (!orderId) {
             return res.json({ status: 'error', message: 'orderId required' });
         }
+        if (!(await ensureOrdersOwned(req, res, orderId))) return;
 
         // Update order if fields provided
         if (note !== undefined || discount !== undefined || serviceFee !== undefined) {
@@ -258,6 +285,7 @@ const deleteOrder = async (req, res) => {
         if (!orderId) {
             return res.json({ status: 'error', message: 'orderId required' });
         }
+        if (!(await ensureOrdersOwned(req, res, orderId))) return;
 
         // Soft delete - set status to deleted (e.g., status = 3)
         await pool.execute(
@@ -284,6 +312,7 @@ const payOrder = async (req, res) => {
         if (!orderId) {
             return res.json({ status: 'error', message: 'orderId required' });
         }
+        if (!(await ensureOrdersOwned(req, res, orderId))) return;
 
         // Update order status to paid (status = 2)
         await pool.execute(`
@@ -311,6 +340,7 @@ const updateTable = async (req, res) => {
         if (!orderId) {
             return res.json({ status: 'error', message: 'orderId required' });
         }
+        if (!(await ensureOrdersOwned(req, res, orderId))) return;
 
         await pool.execute(
             'UPDATE orders SET table_id = ?, hall_id = ? WHERE id = ?',
@@ -336,6 +366,7 @@ const updateWaiter = async (req, res) => {
         if (!orderId) {
             return res.json({ status: 'error', message: 'orderId required' });
         }
+        if (!(await ensureOrdersOwned(req, res, orderId))) return;
 
         await pool.execute(
             'UPDATE orders SET waiter_id = ? WHERE id = ?',
@@ -361,6 +392,7 @@ const updateSaleType = async (req, res) => {
         if (!orderId) {
             return res.json({ status: 'error', message: 'orderId required' });
         }
+        if (!(await ensureOrdersOwned(req, res, orderId))) return;
 
         await pool.execute(
             'UPDATE orders SET sale_type = ? WHERE id = ?',
@@ -386,6 +418,7 @@ const reverseOrder = async (req, res) => {
         if (!orderId) {
             return res.json({ status: 'error', message: 'orderId required' });
         }
+        if (!(await ensureOrdersOwned(req, res, orderId))) return;
 
         await pool.execute(
             'UPDATE orders SET status = 1 WHERE id = ?',
@@ -411,6 +444,7 @@ const splitOrder = async (req, res) => {
         if (!orderId || !itemIds || itemIds.length === 0) {
             return res.json({ status: 'error', message: 'orderId and itemIds required' });
         }
+        if (!(await ensureOrdersOwned(req, res, orderId))) return;
 
         // Get original order
         const [originalOrder] = await pool.execute('SELECT * FROM orders WHERE id = ?', [orderId]);
@@ -425,15 +459,15 @@ const splitOrder = async (req, res) => {
         const [newOrderResult] = await pool.execute(`
             INSERT INTO orders (uuid, local_id, profile_id, table_id, hall_id, waiter_id, terminal_id, sale_type, status, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())
-        `, [uuid, localId, profileId || originalOrder[0].profile_id, newTableId || originalOrder[0].table_id, newHallId || originalOrder[0].hall_id, waiterId || originalOrder[0].waiter_id, originalOrder[0].terminal_id, originalOrder[0].sale_type]);
+        `, [uuid, localId, req.terminal ? req.terminal.profileId : (profileId || originalOrder[0].profile_id), newTableId || originalOrder[0].table_id, newHallId || originalOrder[0].hall_id, waiterId || originalOrder[0].waiter_id, originalOrder[0].terminal_id, originalOrder[0].sale_type]);
 
         const newOrderId = newOrderResult.insertId;
 
-        // Move items to new order
+        // Move items to new order — yalnız əsl çekin məhsulları (başqa çekin məhsulu daşınmasın)
         const placeholders = itemIds.map(() => '?').join(',');
         await pool.execute(
-            `UPDATE orders_items SET order_id = ? WHERE id IN (${placeholders})`,
-            [newOrderId, ...itemIds]
+            `UPDATE orders_items SET order_id = ? WHERE order_id = ? AND id IN (${placeholders})`,
+            [newOrderId, orderId, ...itemIds]
         );
 
         res.json({
@@ -460,6 +494,7 @@ const mergeOrders = async (req, res) => {
         if (!sourceOrderId || !targetOrderId) {
             return res.json({ status: 'error', message: 'sourceOrderId and targetOrderId required' });
         }
+        if (!(await ensureOrdersOwned(req, res, sourceOrderId, targetOrderId))) return;
 
         // Move all items from source to target
         await pool.execute(
@@ -487,7 +522,8 @@ const mergeOrders = async (req, res) => {
  */
 const searchOrders = async (req, res) => {
     try {
-        const { profileId, query, searchBy = 'id' } = req.body;
+        const { query, searchBy = 'id' } = req.body;
+        const profileId = profileIdOf(req);
 
         if (!profileId || !query) {
             return res.json({ status: 'error', message: 'profileId and query required' });
@@ -541,6 +577,7 @@ const updateCustomer = async (req, res) => {
         if (!orderId) {
             return res.json({ status: 'error', message: 'orderId required' });
         }
+        if (!(await ensureOrdersOwned(req, res, orderId))) return;
 
         await pool.execute(
             'UPDATE orders SET customer_name = ?, customer_phone = ? WHERE id = ?',
@@ -565,6 +602,18 @@ const deleteOrderItem = async (req, res) => {
 
         if (!itemId) {
             return res.json({ status: 'error', message: 'itemId required' });
+        }
+
+        if (req.terminal) {
+            const [owned] = await pool.execute(
+                `SELECT oi.id FROM orders_items oi
+                   JOIN orders o ON o.id = oi.order_id
+                  WHERE oi.id = ? AND o.profile_id = ?`,
+                [itemId, req.terminal.profileId]
+            );
+            if (owned.length === 0) {
+                return res.json({ status: 'error', message: 'Item not found' });
+            }
         }
 
         // Soft delete or hard delete based on your preference

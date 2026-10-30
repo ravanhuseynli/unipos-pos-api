@@ -10,12 +10,45 @@ Welcome to the UniPOS API documentation. This API serves as the backend for the 
 ---
 
 ## Authentication & Authorization
-The API uses JSON Web Tokens (JWT) for authentication where required. However, many endpoints (e.g., POS or Order creation) are currently public and do not enforce authentication middleware, though they may require `profileId` or specific identifiers in the request body.
+There are three kinds of credentials:
 
-Where a token is required, include it in the `Authorization` header using the Bearer schema:
+| Who | Token | How to get it |
+|-----|-------|---------------|
+| POS terminal | **POS session token** (`pst_…`, opaque, not a JWT) | `POST /terminal/login` → `data.session_token` |
+| Admin | JWT | `POST /auth/login` |
+| QR menu guest | JWT (`type: "qr_user"`) | `POST /qr-auth/login` (section 8) |
+
+All are sent the same way:
 ```http
-Authorization: Bearer <your_jwt_token>
+Authorization: Bearer <token>
 ```
+
+### POS session token
+POS endpoints (`/pos/*` except the public ones below, `/orders/*`, `/products/*`, `/tables/*`, `/waiters/*`, `/terminal/me`) are protected by the POS session. The server setting `POS_AUTH_MODE` decides what happens without a token:
+
+| `POS_AUTH_MODE` | No token | Valid token | Invalid / revoked token |
+|-----------------|----------|-------------|-------------------------|
+| `compat` (default) | Allowed (old POS builds keep working) | Allowed, scoped to the session's restaurant | `401` |
+| `strict` | `401 token_missing` | Allowed, scoped to the session's restaurant | `401` |
+
+With a token, the restaurant comes from the session: a `profileId` (URL, body or query) of a different restaurant returns `403 profile_mismatch`, and `orderId` / `itemId` of another restaurant's order returns `Order not found` / `Item not found`.
+
+The session never expires while it is used: it ends after `POS_SESSION_IDLE_DAYS` (default 90) days **without any request**, when the terminal password changes, when the terminal is deleted, or on `POST /terminal/logout`. There is no refresh token. If the profile is deactivated (`is_working = 0`) requests return `403 account_inactive`, but the session is kept and works again once the profile is reactivated.
+
+**Public endpoints (no token, used by the QR menu):** `GET /pos/menu/:username`, `GET /pos/reviews/:id`, `POST /pos/reviews`, `/modifiers/*`, `/qr-orders/*`, `/qr-auth/*`, `POST /terminal/login`, `POST /pos/profile`, `GET /health`.
+
+**Session error responses** (`success: false`, `status: "error"`):
+
+| HTTP | `code` | Meaning — what the POS should do |
+|------|--------|----------------------------------|
+| 401 | `token_missing` | No token (strict mode) — log in |
+| 401 | `invalid_token` | Unknown token — log in |
+| 401 | `session_revoked` | Password changed / terminal removed / logged out — log in |
+| 401 | `session_expired` | Unused for `POS_SESSION_IDLE_DAYS` days — log in |
+| 403 | `account_inactive` | Profile deactivated — show blocked screen, keep the token |
+| 403 | `profile_mismatch` | Request names another restaurant — client bug |
+
+Full POS integration guide: [`docs/POS_SESSION_AUTH.md`](docs/POS_SESSION_AUTH.md).
 
 ---
 
@@ -23,6 +56,8 @@ Authorization: Bearer <your_jwt_token>
 To ensure service stability, rate limiting is applied to all `/api` routes:
 - **Window**: 15 minutes
 - **Max limit**: 3000 requests per IP address
+
+Terminal logins (`POST /terminal/login`, `POST /pos/profile`) have an extra limit: **20 failed attempts per 15 minutes per IP + restaurant**. Successful logins are not counted. When exceeded: `429` with `code: "too_many_attempts"` and a `Retry-After` header.
 
 If the limit is exceeded, the server returns a `429 Too Many Requests` status with the message: 
 `"Çox çox sorğu göndərdiniz. Zəhmət olmasa bir az gözləyin."`
@@ -115,7 +150,7 @@ Retrieve information about the currently authenticated admin.
 ## 2. Terminal Endpoints
 
 ### 2.1 Terminal Login
-Authenticate a POS terminal and receive a JWT token.
+Authenticate a POS terminal and receive a POS session token (`data.session_token`).
 
 - **URL**: `/terminal/login`
 - **Method**: `POST`
@@ -127,6 +162,7 @@ Authenticate a POS terminal and receive a JWT token.
 | `username` | string | Yes | Associated profile/admin username. |
 | `terminal_id` | string | Yes | The ID of the terminal to login. |
 | `terminal_password` | string | Yes | The password for the specific terminal. |
+| `device_name` | string | No | Free text shown in the session list (e.g. `"Kassa-1 / DESKTOP-AB12"`). |
 
 **Example Request**:
 ```json
@@ -144,6 +180,8 @@ Authenticate a POS terminal and receive a JWT token.
   "message": "Terminal uğurla daxil oldu!",
   "data": {
     "token": "eyJhbG...",
+    "session_token": "pst_4mN0q...",
+    "session_idle_days": 90,
     "profile": {
       "id": 1,
       "username": "admin",
@@ -161,17 +199,23 @@ Authenticate a POS terminal and receive a JWT token.
   }
 }
 ```
+- `session_token` — send it as `Authorization: Bearer <session_token>` on every POS request and in the `/pos` socket handshake (`auth: { token }`). Every login creates a new session; there is no limit per terminal. It is `null` only if the session could not be stored (compat mode keeps the login working).
+- `token` — legacy JWT, **deprecated**. No endpoint checks it; it stays only for compatibility.
+
 **Error Responses**:
 - `400 Bad Request`: "İstifadəçi adı, terminal ID və terminal şifrəsi tələb olunur."
 - `401 Unauthorized`: "İstifadəçi tapılmadı." OR "Terminal ID və ya şifrə yanlışdır."
 - `403 Forbidden`: "Hesab aktiv deyil. Dəstək xidməti ilə əlaqə saxlayın."
+- `429 Too Many Requests`: `code: "too_many_attempts"` (see Rate Limiting)
 
 ### 2.2 Get Terminal Info
 Retrieve information about all terminals under a specific profile.
 
 - **URL**: `/terminal/me/:profileId`
 - **Method**: `GET`
-- **Auth Required**: No
+- **Auth Required**: POS session (`POS_AUTH_MODE`)
+
+Terminal passwords (`terminal_password`) and the profile `password` are **not** returned.
 
 **URL Parameters**:
 | Parameter | Type | Required | Description |
@@ -194,7 +238,6 @@ Retrieve information about all terminals under a specific profile.
         "id": 5,
         "profile_id": 1,
         "terminal_id": "TERM_01",
-        "terminal_password": "tpass",
         "is_master": 1
       }
     ]
@@ -205,6 +248,37 @@ Retrieve information about all terminals under a specific profile.
 - `400 Bad Request`: "Profile ID tələb olunur."
 - `404 Not Found`: "Profil tapılmadı."
 
+### 2.3 Check Session
+Checks that the session token is valid and returns its terminal. Useful on POS start-up.
+
+- **URL**: `/terminal/session`
+- **Method**: `GET`
+- **Auth Required**: POS session (always, regardless of `POS_AUTH_MODE`)
+
+**Success Response (200 OK)**:
+```json
+{
+  "success": true,
+  "data": {
+    "profile_id": 14,
+    "username": "unipos",
+    "terminal_id": 60152735,
+    "terminal_group_id": 211,
+    "is_master": 1
+  }
+}
+```
+**Error Responses**: session errors (see *Authentication & Authorization*).
+
+### 2.4 Terminal Logout
+Revokes the current session. Other sessions (other devices) are not affected.
+
+- **URL**: `/terminal/logout`
+- **Method**: `POST`
+- **Auth Required**: POS session (always)
+
+**Success Response (200 OK)**: `{ "success": true, "message": "Sessiya bağlandı." }`
+
 ---
 
 ## 3. Product Endpoints
@@ -214,7 +288,7 @@ Retrieve all products for a profile, ordered by sorting config.
 
 - **URL**: `/products/:profileId`
 - **Method**: `GET`
-- **Auth Required**: No
+- **Auth Required**: POS session (`POS_AUTH_MODE`)
 
 **URL Parameters**:
 | Parameter | Type | Required | Description |
@@ -245,7 +319,7 @@ Retrieve a specific product by its ID under a specific profile.
 
 - **URL**: `/products/:profileId/:id`
 - **Method**: `GET`
-- **Auth Required**: No
+- **Auth Required**: POS session (`POS_AUTH_MODE`)
 
 **URL Parameters**:
 | Parameter | Type | Required | Description |
@@ -306,7 +380,7 @@ Retrieve specific waiter details.
 
 ## 6. Point of Sale (POS) Endpoints
 
-These endpoints provide necessary reference data and functionality for POS terminals. All endpoints are public (no JWT required).
+These endpoints provide necessary reference data and functionality for POS terminals. They require the POS session (`POS_AUTH_MODE`), except the public `GET /pos/menu/:username`, `/pos/reviews` and `POST /pos/profile`.
 
 ### 6.1 Get Printers
 Retrieve all printers or cash printers for a profile.
@@ -381,6 +455,7 @@ Retrieve a specific terminal's profile.
 - **URL**: `/pos/terminals`
 - **Method**: `POST`
 - **Request Body**: `{ "profileId": 1 }`
+- `terminal_password` is not returned.
 
 #### Get Active Orders
 Retrieve all currently open/active orders for a profile.
@@ -396,7 +471,7 @@ Retrieve all currently open/active orders for a profile.
 
 ## 7. Order Endpoints
 
-These endpoints handle all operations related to orders/checks, such as creation, item modifications, payments, and splits. All endpoints under `/api/orders` use the **POST** method and require a `profileId` parameter in the request body (or are explicitly tied to an `orderId`). Auth token is not strictly required.
+These endpoints handle all operations related to orders/checks, such as creation, item modifications, payments, and splits. All endpoints under `/api/orders` use the **POST** method and require a `profileId` parameter in the request body (or are explicitly tied to an `orderId`). They require the POS session (`POS_AUTH_MODE`); with a session `profileId` may be omitted — it is taken from the session.
 
 ### 7.1 Create Order
 Create a new order and optionally add initial items.

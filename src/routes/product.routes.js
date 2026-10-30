@@ -2,7 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { getAllProducts, getProductById, getProductsByCategory } = require('../controllers/product.controller');
 
-// All routes are PUBLIC - No authentication required
+const { posAuth, checkProfileParam } = require('../middleware/pos_auth.middleware');
+
+// POS sessiyası (POS_AUTH_MODE: compat-da tokensiz də keçir)
+router.use(posAuth);
+router.param('profileId', checkProfileParam);
 
 // Get all products by profile_id
 router.get('/:profileId', getAllProducts);

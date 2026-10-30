@@ -2,6 +2,8 @@ const { pool } = require('../config/database');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
+const { createSession, verifySession, revokeSession } = require('../services/terminalSession.service');
+const { POS_AUTH_MODE } = require('../middleware/pos_auth.middleware');
 
 const UPLOADS_BASE = '/root/new-unipos-backend';
 
@@ -107,12 +109,47 @@ const terminalLogin = async (req, res) => {
             { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
         );
 
+        // POS sessiya tokeni — POS bütün sorğularda `Authorization: Bearer <session_token>` göndərir.
+        // Cədvəl yoxdursa / yazılmadısa compat rejimində login yenə uğurludur (köhnə POS-lar sınmasın).
+        let session = null;
+        try {
+            // Rotasiya: POS hər açılışda yenidən login edir. Köhnə tokenini göndəribsə və o
+            // ELƏ BU terminalındırsa, bağlanır — sessiyalar yığılmasın. Başqa terminalın
+            // tokeni (məs. master slave-in login-ini ötürəndə öz tokenini qoşub) toxunulmur.
+            const previousToken = (req.headers.authorization || '').startsWith('Bearer ')
+                ? req.headers.authorization.slice(7).trim()
+                : null;
+            if (previousToken) {
+                const previous = await verifySession(previousToken, req.ip).catch(() => null);
+                if (previous && previous.terminalGroupId === Number(terminal.id)) {
+                    await revokeSession(previous.id, 'rotated');
+                }
+            }
+
+            session = await createSession({
+                profileId: profile.id,
+                terminalGroupId: terminal.id,
+                terminalId: terminal.terminal_id,
+                terminalPassword: terminal.terminal_password,
+                deviceName: req.body.device_name,
+                ip: req.ip
+            });
+        } catch (sessionError) {
+            console.error('Terminal sessiyası yaradılmadı:', sessionError.message);
+            if (POS_AUTH_MODE === 'strict') {
+                return res.status(500).json({ success: false, message: 'Server xətası baş verdi.' });
+            }
+        }
+
         // Return success response
         res.status(200).json({
             success: true,
             message: 'Terminal uğurla daxil oldu!',
             data: {
+                // Köhnə JWT — heç bir POS endpoint-i onu yoxlamır, uyğunluq üçün qalır
                 token,
+                session_token: session ? session.token : null,
+                session_idle_days: session ? session.idleDays : null,
                 profile: profileData,
                 taxes: taxes,
                 terminal: {
@@ -136,7 +173,7 @@ const terminalLogin = async (req, res) => {
 /**
  * @desc    Get terminal info by profile_id
  * @route   GET /api/terminal/me/:profileId
- * @access  Public (No token required)
+ * @access  POS sessiyası (POS_AUTH_MODE)
  */
 const getTerminalInfo = async (req, res) => {
     try {
@@ -161,12 +198,14 @@ const getTerminalInfo = async (req, res) => {
             });
         }
 
-        const [terminals] = await pool.execute(
+        const [terminalRows] = await pool.execute(
             'SELECT * FROM terminal_groups WHERE profile_id = ?',
             [profileId]
         );
+        // Şifrələr cavaba düşmür — əvvəl profileId bilən hər kəs bütün terminal şifrələrini görürdü
+        const terminals = terminalRows.map(({ terminal_password, ...terminal }) => terminal);
 
-        const profile = { ...profiles[0] };
+        const { password, ...profile } = profiles[0];
         profile.logo = await imageToBase64(profile.logo);
         profile.background_img = await imageToBase64(profile.background_img);
 
@@ -187,7 +226,43 @@ const getTerminalInfo = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Cari sessiyanı bağlayır (terminal çıxışı)
+ * @route   POST /api/terminal/logout
+ * @access  POS sessiyası (həmişə tələb olunur)
+ */
+const terminalLogout = async (req, res) => {
+    try {
+        await revokeSession(req.terminal.id, 'logout');
+        res.status(200).json({ success: true, message: 'Sessiya bağlandı.' });
+    } catch (error) {
+        console.error('Terminal logout xətası:', error);
+        res.status(500).json({ success: false, message: 'Server xətası baş verdi.' });
+    }
+};
+
+/**
+ * @desc    Tokenin keçərli olduğunu yoxlayır, sessiyanın terminalını qaytarır
+ * @route   GET /api/terminal/session
+ * @access  POS sessiyası (həmişə tələb olunur)
+ */
+const getTerminalSession = (req, res) => {
+    const { profileId, terminalId, terminalGroupId, isMaster, username } = req.terminal;
+    res.status(200).json({
+        success: true,
+        data: {
+            profile_id: profileId,
+            username,
+            terminal_id: terminalId,
+            terminal_group_id: terminalGroupId,
+            is_master: isMaster ? 1 : 0
+        }
+    });
+};
+
 module.exports = {
     terminalLogin,
-    getTerminalInfo
+    getTerminalInfo,
+    terminalLogout,
+    getTerminalSession
 };

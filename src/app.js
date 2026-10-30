@@ -10,6 +10,8 @@ const routes = require('./routes');
 const { initSocket } = require('./socket');
 const { ensureQrSchema } = require('./config/qrSchema');
 const { ensureTerminalSchema } = require('./config/terminalSchema');
+const { startSessionCleanup } = require('./services/terminalSession.service');
+const { POS_AUTH_MODE } = require('./middleware/pos_auth.middleware');
 
 const app = express();
 
@@ -87,8 +89,11 @@ const startServer = async () => {
     // QR sifarişinin cədvəli və sütunları — yoxdursa özü yaradılır
     await ensureQrSchema();
 
-    // terminal_groups.terminal_type — yoxdursa özü əlavə olunur
+    // terminal_groups.terminal_type və terminal_sessions — yoxdursa özü yaradılır
     await ensureTerminalSchema();
+
+    // Bağlanmış / uzun müddət istifadə olunmamış POS sessiyaları gündə bir dəfə silinir
+    startSessionCleanup();
 
     // Socket (QR sifarişi) eyni port üzərində işləyir: /socket.io
     const server = http.createServer(app);
@@ -98,6 +103,7 @@ const startServer = async () => {
         console.log(`🚀 Server ${PORT} portunda işləyir`);
         console.log(`📍 API: http://localhost:${PORT}/api`);
         console.log(`🔐 Login: POST http://localhost:${PORT}/api/auth/login`);
+        console.log(`🔑 POS auth rejimi: ${POS_AUTH_MODE}`);
     });
 };
 

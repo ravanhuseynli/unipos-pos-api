@@ -26,14 +26,28 @@ const {
     updateMaxChecks
 } = require('../controllers/pos.controller');
 
-// All routes are PUBLIC - No authentication required
+const {
+    posAuth,
+    checkProfileParam,
+    terminalLoginLimiter
+} = require('../middleware/pos_auth.middleware');
+
+// Public — QR menyu (unipos-qr-next, planşet tətbiqi) və köhnə login.
+// Bu route-lar `router.use(posAuth)`-dan ƏVVƏL olmalıdır.
+router.get('/menu/:profileId', getMenuList);
+router.get('/reviews/:id', getReviews);
+router.post('/reviews', createReview);
+router.post('/profile', terminalLoginLimiter, getProfile);
+
+// Qalanı — POS sessiyası (POS_AUTH_MODE: compat-da tokensiz də keçir)
+router.use(posAuth);
+router.param('profileId', checkProfileParam);
 
 // GET routes
 router.get('/printers/:profileId', getPrinters);
 router.get('/cash-printers/:profileId', getCashPrinters);
 router.get('/categories/:profileId', getCategories);
 router.get('/general-categories/:profileId', getGeneralCategories);
-router.get('/menu/:profileId', getMenuList);
 router.get('/payment-methods/:profileId', getPaymentMethods);
 router.get('/sale-types/:profileId', getSaleTypes);
 router.get('/tags/:profileId', getTags);
@@ -43,16 +57,13 @@ router.get('/return-check-reasons/:profileId', getReturnCheckReasons);
 router.get('/table-groups/:profileId', getTableGroups);
 router.get('/tables/:profileId', getTables);
 router.get('/waiters/:profileId', getWaitersList);
-router.get('/reviews/:id', getReviews);
 router.get('/max-checks/:profileId', getMaxChecks);
 
 // POST routes
 router.post('/waiters-auth', waitersAuth);
-router.post('/profile', getProfile);
 router.post('/terminals', getTerminalsList);
 router.post('/without-paid-method', getWithoutPaidMethod);
 router.post('/active-orders', getAllActiveOrders);
-router.post('/reviews', createReview);
 router.post('/max-checks', updateMaxChecks);
 
 module.exports = router;

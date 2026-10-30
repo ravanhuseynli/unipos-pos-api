@@ -538,6 +538,7 @@ const getProfile = async (req, res) => {
         const { restaurantName, terminalPassword, terminalId } = req.body;
 
         if (!restaurantName) {
+            res.locals.loginFailed = true;
             return res.json({ status: 'false', messages: 'Restaurant Not Found' });
         }
 
@@ -561,6 +562,7 @@ const getProfile = async (req, res) => {
                 data: profile
             });
         } else {
+            res.locals.loginFailed = true; // terminalLoginLimiter bunu uğursuz cəhd sayır
             res.json({ status: 'false', messages: 'Uncorrect Password!' });
         }
     } catch (error) {
@@ -579,10 +581,12 @@ const getTerminalsList = async (req, res) => {
         if (!profileId) {
             return res.json({ status: 'error' });
         }
-        const [terminalList] = await pool.execute(
+        const [terminalRows] = await pool.execute(
             'SELECT * FROM terminal_groups WHERE profile_id = ?',
             [profileId]
         );
+        // Terminal şifrələri cavaba düşmür
+        const terminalList = terminalRows.map(({ terminal_password, ...terminal }) => terminal);
         res.json({ status: 'success', data: terminalList });
     } catch (error) {
         console.error('GetTerminalsList error:', error);

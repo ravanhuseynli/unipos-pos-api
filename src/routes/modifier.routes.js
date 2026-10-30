@@ -6,7 +6,7 @@ const {
     getModifierGroupById
 } = require('../controllers/modifier.controller');
 
-// All routes are PUBLIC - No authentication required
+// Public — QR menyu (unipos-qr-next) modifikatorları buradan oxuyur. Yalnız menyu məlumatıdır.
 
 // Get all modifiers by profile_id
 router.get('/:profileId', getModifiersByProfileId);

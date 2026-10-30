@@ -3,7 +3,7 @@ const { pool } = require('../config/database');
 /**
  * @desc    Get all waiters by profile_id
  * @route   GET /api/waiters/:profileId
- * @access  Public (No token required)
+ * @access  POS sessiyası (POS_AUTH_MODE)
  */
 const getWaitersByProfileId = async (req, res) => {
     try {
@@ -39,16 +39,22 @@ const getWaitersByProfileId = async (req, res) => {
 /**
  * @desc    Get single waiter by id
  * @route   GET /api/waiters/single/:id
- * @access  Public (No token required)
+ * @access  POS sessiyası (POS_AUTH_MODE)
  */
 const getWaiterById = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const [waiters] = await pool.execute(
-            `SELECT * FROM waiters WHERE id = ?`,
-            [id]
-        );
+        // Sessiya varsa yalnız öz restoranının ofisiantı (compat-da tokensiz sorğu köhnə qayda ilə)
+        const [waiters] = req.terminal
+            ? await pool.execute(
+                `SELECT * FROM waiters WHERE id = ? AND profile_id = ?`,
+                [id, req.terminal.profileId]
+            )
+            : await pool.execute(
+                `SELECT * FROM waiters WHERE id = ?`,
+                [id]
+            );
 
         if (waiters.length === 0) {
             return res.status(404).json({

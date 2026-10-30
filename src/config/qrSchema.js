@@ -101,4 +101,4 @@ async function ensureQrSchema() {
     }
 }
 
-module.exports = { ensureQrSchema, ensureColumns };
+module.exports = { ensureQrSchema, ensureColumns, ensureTable };

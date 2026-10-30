@@ -3,7 +3,7 @@ const { pool } = require('../config/database');
 /**
  * @desc    Get all products by profile_id
  * @route   GET /api/products/:profileId
- * @access  Public (No token required)
+ * @access  POS sessiyası (POS_AUTH_MODE)
  */
 const getAllProducts = async (req, res) => {
     try {
@@ -71,7 +71,7 @@ const getAllProducts = async (req, res) => {
 /**
  * @desc    Get single product by id and profile_id
  * @route   GET /api/products/:profileId/:id
- * @access  Public (No token required)
+ * @access  POS sessiyası (POS_AUTH_MODE)
  */
 const getProductById = async (req, res) => {
     try {
@@ -115,7 +115,7 @@ const getProductById = async (req, res) => {
 /**
  * @desc    Get products by category and profile_id
  * @route   GET /api/products/:profileId/category/:categoryId
- * @access  Public (No token required)
+ * @access  POS sessiyası (POS_AUTH_MODE)
  */
 const getProductsByCategory = async (req, res) => {
     try {

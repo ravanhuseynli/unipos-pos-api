@@ -2,11 +2,14 @@ const { Server } = require('socket.io');
 const { pool } = require('../config/database');
 const { verifyGuestToken } = require('../utils/tableToken');
 const qrOrders = require('../services/qrOrder.service');
+const { verifySession, PosSessionError } = require('../services/terminalSession.service');
+const { POS_AUTH_MODE } = require('../middleware/pos_auth.middleware');
 
 /**
  * Global socket — bütün restoranların kassaları və QR qonaqları bura qoşulur.
  *
- *   /pos   — kassalar. Giriş POS-un onsuz da istifadə etdiyi məlumatlarla:
+ *   /pos   — kassalar. Giriş sessiya tokeni ilə: { token } (POST /api/terminal/login →
+ *            data.session_token). POS_AUTH_MODE=compat olanda köhnə giriş də keçir:
  *            { restaurantName (username), terminalId, terminalPassword }
  *   /guest — qonaq yalnız ÖZ sifarişinin statusunu izləyir: { orderUuid, guestToken }
  *
@@ -46,30 +49,53 @@ const authError = (code) => {
     return err;
 };
 
-/** POST /api/pos/profile ilə eyni yoxlama: username + terminal_id + terminal_password */
+/** Sessiya tokeni ilə: { token } → terminal (profile_id, terminal_id, is_master) */
+const terminalFromToken = async (token) => {
+    const session = await verifySession(String(token), null);
+    return { profile_id: session.profileId, terminal_id: session.terminalId, is_master: session.isMaster ? 1 : 0 };
+};
+
+/** Köhnə giriş (yalnız compat): POST /api/pos/profile ilə eyni yoxlama — username + terminal_id + terminal_password */
+const terminalFromCredentials = async ({ restaurantName, terminalId, terminalPassword }) => {
+    if (!restaurantName || !terminalId || terminalPassword === undefined || terminalPassword === null) return null;
+
+    const [rows] = await pool.execute(
+        `SELECT p.id AS profile_id, tg.terminal_id, tg.terminal_password, tg.is_master
+           FROM profiles p
+           JOIN terminal_groups tg ON tg.profile_id = p.id
+          WHERE p.username = ? AND tg.terminal_id = ?
+          LIMIT 1`,
+        [String(restaurantName), String(terminalId)]
+    );
+    const terminal = rows[0];
+    if (!terminal || String(terminal.terminal_password) !== String(terminalPassword)) return null;
+    return terminal;
+};
+
 const authenticatePos = async (socket, next) => {
     const ip = clientIp(socket);
     if (isBlocked(ip)) return next(authError('too_many_attempts'));
 
     try {
-        const { restaurantName, terminalId, terminalPassword } = socket.handshake.auth || {};
-        if (!restaurantName || !terminalId || terminalPassword === undefined || terminalPassword === null) {
-            recordFailure(ip);
-            return next(authError('invalid_credentials'));
-        }
-
-        const [rows] = await pool.execute(
-            `SELECT p.id AS profile_id, tg.terminal_id, tg.terminal_password, tg.is_master
-               FROM profiles p
-               JOIN terminal_groups tg ON tg.profile_id = p.id
-              WHERE p.username = ? AND tg.terminal_id = ?
-              LIMIT 1`,
-            [String(restaurantName), String(terminalId)]
-        );
-        const terminal = rows[0];
-        if (!terminal || String(terminal.terminal_password) !== String(terminalPassword)) {
-            recordFailure(ip);
-            return next(authError('invalid_credentials'));
+        const auth = socket.handshake.auth || {};
+        let terminal;
+        if (auth.token) {
+            try {
+                terminal = await terminalFromToken(auth.token);
+            } catch (error) {
+                if (!(error instanceof PosSessionError)) throw error;
+                recordFailure(ip);
+                // invalid_token / session_revoked / session_expired / account_inactive
+                return next(authError(error.code));
+            }
+        } else if (POS_AUTH_MODE === 'strict') {
+            return next(authError('token_required'));
+        } else {
+            terminal = await terminalFromCredentials(auth);
+            if (!terminal) {
+                recordFailure(ip);
+                return next(authError('invalid_credentials'));
+            }
         }
 
         // Sifarişi master kassa qəbul edir. Restoranda master təyin olunmayıbsa

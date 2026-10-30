@@ -3,7 +3,7 @@ const { pool } = require('../config/database');
 /**
  * @desc    Get all halls (table_groups) by profile_id
  * @route   GET /api/halls/:profileId
- * @access  Public (No token required)
+ * @access  POS sessiyası (POS_AUTH_MODE)
  */
 const getHallsByProfileId = async (req, res) => {
     try {
@@ -39,7 +39,7 @@ const getHallsByProfileId = async (req, res) => {
 /**
  * @desc    Get all tables by profile_id
  * @route   GET /api/tables/:profileId
- * @access  Public (No token required)
+ * @access  POS sessiyası (POS_AUTH_MODE)
  */
 const getTablesByProfileId = async (req, res) => {
     try {
@@ -75,16 +75,22 @@ const getTablesByProfileId = async (req, res) => {
 /**
  * @desc    Get tables by hall_id
  * @route   GET /api/tables/hall/:hallId
- * @access  Public (No token required)
+ * @access  POS sessiyası (POS_AUTH_MODE)
  */
 const getTablesByHallId = async (req, res) => {
     try {
         const { hallId } = req.params;
 
-        const [tables] = await pool.execute(
-            `SELECT * FROM tables WHERE hall_id = ? ORDER BY ordering ASC`,
-            [hallId]
-        );
+        // Sessiya varsa yalnız öz restoranının masaları (compat-da tokensiz sorğu köhnə qayda ilə)
+        const [tables] = req.terminal
+            ? await pool.execute(
+                `SELECT * FROM tables WHERE hall_id = ? AND profile_id = ? ORDER BY ordering ASC`,
+                [hallId, req.terminal.profileId]
+            )
+            : await pool.execute(
+                `SELECT * FROM tables WHERE hall_id = ? ORDER BY ordering ASC`,
+                [hallId]
+            );
 
         res.status(200).json({
             success: true,
@@ -104,7 +110,7 @@ const getTablesByHallId = async (req, res) => {
 /**
  * @desc    Get halls with their tables by profile_id
  * @route   GET /api/halls/:profileId/with-tables
- * @access  Public (No token required)
+ * @access  POS sessiyası (POS_AUTH_MODE)
  */
 const getHallsWithTables = async (req, res) => {
     try {
