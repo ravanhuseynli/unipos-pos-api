@@ -26,6 +26,7 @@ Hər addım və commit bura yazılır (ən yenisi aşağıda).
 | Tarix | Addım | Commit |
 |---|---|---|
 | 2026-10-30 | Analiz: POS route-larının hamısı açıq, `profileId` ilə IDOR; `/terminal/me` terminal şifrələrini qaytarır; POS-dakı JWT istifadə olunmur; master/slave axını, QR menyunun endpoint-ləri, sync-in `api.unipos.tech`-də olduğu yoxlanıldı | — |
-| 2026-10-30 | Server tərəfi yazıldı (cədvəl, servis, middleware, route-lar, controller yoxlamaları, socket, limit) | — |
+| 2026-10-30 | Server tərəfi yazıldı (cədvəl, servis, middleware, route-lar, controller yoxlamaları, socket, limit) | `a0e5970` |
 | 2026-10-30 | Müvəqqəti MariaDB-də test: compat/strict, profile_mismatch, başqa restoranın çeki/itemi, split, şifrə dəyişikliyi → `password_changed`, 91 gün → `session_expired`, logout, `account_inactive` (sessiya qalır), rotasiya, slave login master tokenini bağlamır, socket token/köhnə giriş hər iki rejimdə, login limiti IP+restoran — hamısı keçdi | — |
-| 2026-10-30 | Sənədlər: API_DOCUMENTATION, POS_SESSION_AUTH.md, CLAUDE.md, docs/* | — |
+| 2026-10-30 | Sənədlər: API_DOCUMENTATION, POS_SESSION_AUTH.md, CLAUDE.md, docs/* | `a0e5970` |
+| 2026-10-30 | Jurnala commit hash-i yazıldı | (bu commit) |
