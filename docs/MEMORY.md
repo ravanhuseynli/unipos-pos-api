@@ -21,6 +21,7 @@ Kodda / git-də görünməyən faktlar və səbəblər. Yeni fakt öyrənəndə 
 
 ## POS (klient) faktları — POS-ReDesing
 
+- **UniPOS-Lite istifadə olunmur** (istifadəçi, 2026-10-31) — yeganə POS `../POS-ReDesing/POS-ReDesing/electron`-dur. Sənədlərdə və endpoint dəyişikliklərində Lite-ı nəzərə almayın.
 - POS hər açılışda yaddaşdakı məlumatlarla `authPos` → lokal backend `/login` → bu API `/terminal/login` edir. Yəni hər açılış = yeni login → **rotasiya** lazımdır (köhnə token `Authorization`-da gəlir, eyni terminaldırsa bağlanır).
 - Slave kassanın frontendi master-in backend-inə (`http://<masterIp>:55667/api`) qoşulur; slave login-i master-in `LoginController`-i vasitəsilə bu API-yə slave-in öz credentials-ı ilə gedir.
 - Master-slave rejimində bulud sorğularını master-in backend-i edir. Tək kassa həmişə master-dir.

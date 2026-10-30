@@ -53,4 +53,4 @@ docs/                      — tələblər, plan, yaddaş, POS inteqrasiya təli
 - **Line ending**: köhnə fayllar (controllers, routes, `app.js`, `API_DOCUMENTATION.md`) **CRLF**, yeniləri LF. Redaktədə mövcud line ending-i saxlayın, yoxsa diff bütün faylı dəyişmiş göstərir.
 - Cavab formatı endpoint-ə görə fərqlidir (`{status: 'success'}` köhnə POS endpoint-lərində, `{success: true}` yenilərində) — mövcud formatı saxlayın, klientlər ona bağlıdır.
 - Yeni cədvəl: `sql/<ad>.sql` + `config/*Schema.js`-də `ensureTable`. Server sxem xətasında çökmür, xəbərdarlıq yazır.
-- Klientlər: POS — `../POS-ReDesing/POS-ReDesing/electron`, `../UniPOS-Lite`; QR — `../unipos-qr-next`. Endpoint cavabını dəyişməzdən əvvəl orada istifadəsini yoxlayın.
+- Klientlər: POS — `../POS-ReDesing/POS-ReDesing/electron` (UniPOS-Lite istifadə olunmur — nəzərə almayın); QR — `../unipos-qr-next`. Endpoint cavabını dəyişməzdən əvvəl orada istifadəsini yoxlayın.

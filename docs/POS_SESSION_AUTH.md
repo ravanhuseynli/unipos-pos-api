@@ -184,8 +184,6 @@ QR sifariş socket-i: `https://qrapi.unipos.tech` (addım 6). Beləliklə POS bu
 | `backend/controller/SalesShiftController.js:7` | `ADMIN_API = "http://46.224.8.157:8089/api"` | `"https://api.unipos.tech/api"` |
 | `backend/controller/OrderingController.js:4-5,47-48` | Eyni `PUT` həm `8089`-a, həm `api.unipos.tech`-ə **paralel** gedir (eyni server — iki dəfə yazılır) | Yalnız `https://api.unipos.tech/api` — `LOCAL_ADMIN_API` və onun `tryPut`-u silinsin |
 
-UniPOS-Lite-da eyni iki fayl var (`electron/backend/controller/OrderingController.js`, `SalesShiftController.js`).
-
 ### 9.2 ⚠️ TLS sertifikat yoxlaması söndürülüb — açılmalıdır
 
 ```js
