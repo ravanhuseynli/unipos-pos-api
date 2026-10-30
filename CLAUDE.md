@@ -1,7 +1,7 @@
 # CLAUDE.md — UniPOS Node JS Api
 
 POS kassaları (Electron), QR menyu (`unipos-qr-next`, qr.unipos.tech) və planşet tətbiqi üçün Express + MySQL API.
-Production (eyni server): `https://pos-api.unipos.tech/api` (POS), `https://qrapi.unipos.tech/api` (QR menyu), `46.224.8.157:35627` (köhnə birbaşa; POS-un QR socket-i). `api.unipos.tech` — **ayrı** server (admin backend, sync), amma **eyni baza**.
+Production (eyni server): `https://pos-api.unipos.tech/api` (POS), `https://qrapi.unipos.tech` (QR menyu + POS-un QR sifariş socket-i), `46.224.8.157:35627` (köhnə birbaşa IP, işlədilməməlidir). `api.unipos.tech` — **ayrı** server (admin backend, sync), amma **eyni baza**.
 
 ## İş qaydası (məcburi)
 

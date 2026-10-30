@@ -5,8 +5,8 @@ Welcome to the UniPOS API documentation. This API serves as the backend for the 
 
 **Base URL**:
 - POS terminals: `https://pos-api.unipos.tech/api`
-- QR menu: `https://qrapi.unipos.tech/api`
-- Legacy direct address (POS QR-order socket `/pos`): `http://46.224.8.157:35627`
+- QR menu and the POS QR-order socket (`/pos`): `https://qrapi.unipos.tech`
+- Legacy direct address `http://46.224.8.157:35627` — do not use in new code
 **Current Version**: `1.0.0`
 **Content Type**: All requests and responses should use `application/json`.
 

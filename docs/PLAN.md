@@ -14,7 +14,7 @@ Tələb: [`REQUIREMENTS.md` → R1](REQUIREMENTS.md). Branch: `feat/pos-session-
 - [x] Server: socket `/pos` — `auth: { token }`
 - [x] Server: login brute-force limiti (IP + restoran, 20 uğursuz / 15 dəq)
 - [x] Sənədlər: `API_DOCUMENTATION.md`, `docs/POS_SESSION_AUTH.md` (POS developeri üçün)
-- [x] POS üçün domen: `https://pos-api.unipos.tech` (QR socket köhnə ünvanda qalır) — sənədlərə yazıldı
+- [x] POS üçün domen: login/REST → `https://pos-api.unipos.tech`, QR socket → `https://qrapi.unipos.tech` (IP yox) — sənədlərə yazıldı
 - [ ] Deploy (`POS_AUTH_MODE=compat`, `TRUST_PROXY=1` — pos-api nginx/openresty arxasındadır)
 - [ ] POS inteqrasiyası (POS developeri, `docs/POS_SESSION_AUTH.md`)
 - [ ] Loglarda "POS tokensiz sorğular" itəndən sonra `POS_AUTH_MODE=strict`
@@ -32,3 +32,4 @@ Hər addım və commit bura yazılır (ən yenisi aşağıda).
 | 2026-10-30 | Sənədlər: API_DOCUMENTATION, POS_SESSION_AUTH.md, CLAUDE.md, docs/* | `a0e5970` |
 | 2026-10-30 | Jurnala commit hash-i yazıldı | `a09d93c` |
 | 2026-10-30 | API `pos-api.unipos.tech`-ə keçirildi (istifadəçi). `/api/health` → 200, openresty; yeni kod hələ deploy olunmayıb (`/terminal/session` → 404). POS üçün login/REST → pos-api, QR socket köhnə ünvanda — POS_SESSION_AUTH.md, API_DOCUMENTATION, MEMORY, CLAUDE.md, REQUIREMENTS yeniləndi | `ccf56ae` |
+| 2026-10-30 | QR socket də IP-dən `https://qrapi.unipos.tech`-ə (istifadəçi). Yoxlandı: qrapi və pos-api üzərindən `/guest` websocket və polling serverə çatır. POS_SESSION_AUTH.md (addım 6, 9, yoxlama siyahısı), MEMORY, CLAUDE.md, API_DOCUMENTATION, REQUIREMENTS yeniləndi | (bu commit) |

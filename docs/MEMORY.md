@@ -6,8 +6,8 @@ Kodda / git-də görünməyən faktlar və səbəblər. Yeni fakt öyrənəndə 
 
 - Bu API-nin ünvanları (hamısı eyni proses, eyni baza):
   - `https://pos-api.unipos.tech/api` — **POS login və REST sorğuları** (2026-10-30-dan; openresty/nginx arxasında)
-  - `http://46.224.8.157:35627` — köhnə birbaşa ünvan; POS-un **QR sifariş socket-i** (`/pos`) burada qalır, şəkil URL-ləri də
-  - `https://qrapi.unipos.tech/api` — QR menyu (qr.unipos.tech)
+  - `https://qrapi.unipos.tech` — QR menyu (qr.unipos.tech) və POS-un **QR sifariş socket-i** (`/pos`, websocket — yoxlanılıb)
+  - `http://46.224.8.157:35627` — köhnə birbaşa IP ünvanı; POS-da artıq işlədilməməlidir (şəkil URL-ləri hələ buradadır)
 - Nginx arxasında `.env`-də `TRUST_PROXY=1` olmalıdır, yoxsa rate limit bütün sorğuları nginx-in IP-si sayır.
 - `api.unipos.tech` — ayrı backend (admin, `/api/sync`, məhsul yaratma, `pos-live` socket), **bu API ilə eyni bazanı** istifadə edir.
 - `46.224.8.157:8089` — POS-un istifadə etdiyi daha bir admin API (növbə/sifariş).

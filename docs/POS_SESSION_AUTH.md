@@ -1,7 +1,7 @@
 # POS sessiya tokeni — POS inteqrasiya təlimatı
 
 > Kimə: POS (Electron) developeri. Server: **UniPOS Node JS Api** — POS üçün ünvan: **`https://pos-api.unipos.tech/api`**.
-> QR sifariş socket-i isə köhnə ünvanında qalır (addım 6).
+> QR sifariş socket-i üçün: **`https://qrapi.unipos.tech`** (addım 6). IP ünvanı (`46.224.8.157:35627`) heç yerdə istifadə olunmamalıdır.
 > Server tərəfi hazırdır və **köhnə POS-ları sındırmır** (`POS_AUTH_MODE=compat`). Bu sənəddəki dəyişikliklər POS-a edilməlidir.
 
 ## 1. Niyə
@@ -116,13 +116,22 @@ Hazırda bu API-yə müraciət edən yerlər (`46.224.8.157:35627/api` axtarış
 | `services/SyncService.js` | `GET /health` (token lazım deyil, zərəri yoxdur) |
 | `front/src/redux/Slices/CouriersSlice.js` | baza ünvanı `http://46.224.8.157:35627/api` |
 
-**Dəyişməyənlər:** QR sifariş socket-i (`front/src/utils/qrSocket.js` → `QR_SOCKET_DEFAULT_BASE`) və şəkil ünvanları (`Pin.jsx`, `CheckMain.jsx`, `CustomerDisplay.jsx` → `http://46.224.8.157:35627/<fayl>`) köhnə ünvanda qalır.
+QR sifariş socket-i bu cədvələ daxil deyil — o, `qrapi.unipos.tech`-ə keçir (addım 6).
 
 `profileId`-ni URL-də göndərməyə davam edin — server onu tokenin restoranı ilə müqayisə edir. Uyğun gəlməsə `403 profile_mismatch` (bu, POS-da bug deməkdir).
 
 ## 6. QR sifariş socket-i (`/pos` namespace)
 
-**Ünvan dəyişmir:** socket köhnə ünvanında qalır (`QR_SOCKET_DEFAULT_BASE = "http://46.224.8.157:35627"`). Bu, `pos-api.unipos.tech` ilə **eyni server və eyni bazadır** — `pos-api`-dən alınan token socket-də də keçərlidir. Dəyişən yalnız `auth` obyektidir.
+**Ünvan:** `QR_SOCKET_DEFAULT_BASE` IP-dən `qrapi` domeninə keçir:
+
+```js
+// front/src/utils/qrSocket.js
+export const QR_SOCKET_DEFAULT_BASE = "https://qrapi.unipos.tech";
+```
+
+`qrapi.unipos.tech` websocket-i ötürür (yoxlanılıb: `transports: ["websocket"]` ilə server cavab verir). Bu, `pos-api.unipos.tech` ilə **eyni server və eyni bazadır** — `pos-api`-dən alınan token socket-də də keçərlidir.
+
+Diqqət: `localStorage.pos_qr_api_base` override-ı köhnə quraşdırmalarda IP ilə yazılıbsa, defolt dəyişsə də IP işlənəcək. Override IP-dirsə (`46.224.8.157`) onu silin / nəzərə almayın.
 
 `front/src/utils/qrSocket.js` hazırda `{ restaurantName, terminalId, terminalPassword }` göndərir. Bu fayl **frontend**-dədir, token isə backend-də saxlanılır — tokeni frontend-ə ötürmək lazımdır (məs. `/login` cavabında `authResult.data.session_token` kimi qalsın, və ya IPC ilə). Slave-in frontendi də QR socket-ə qoşulursa, **öz** tokenini istifadə etməlidir (server sifarişi `is_master`-ə görə master kassaya yönləndirir). Token ilə:
 
@@ -164,7 +173,7 @@ POS bu API-yə indiyə qədər `http://46.224.8.157:35627` ilə gedirdi — traf
 const POS_API = 'https://pos-api.unipos.tech/api';
 ```
 
-QR socket-i istisnadır — köhnə ünvanda qalır (addım 6).
+QR sifariş socket-i: `https://qrapi.unipos.tech` (addım 6). Beləliklə POS bu API-yə IP ilə heç müraciət etmir.
 
 ## 10. Keçid planı
 
@@ -183,7 +192,8 @@ QR socket-i istisnadır — köhnə ünvanda qalır (addım 6).
 - [ ] `qrSocket.js` → `auth: { token }`
 - [ ] 401 / 403 davranışı (addım 7), offline-da token silinmir
 - [ ] Hardcoded JWT silinib
-- [ ] Login və REST sorğuları `https://pos-api.unipos.tech/api`-yə, QR socket köhnə ünvanında
+- [ ] Login və REST sorğuları `https://pos-api.unipos.tech/api`-yə
+- [ ] QR socket `https://qrapi.unipos.tech`-ə (`QR_SOCKET_DEFAULT_BASE`), IP override-ı nəzərə alınmır
 
 Test üçün: `GET /api/terminal/session` (token ilə) → `200` və terminal məlumatı; tokensiz → `401 token_missing`.
 
