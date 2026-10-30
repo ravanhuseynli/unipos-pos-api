@@ -199,4 +199,4 @@ Test üçün: `GET /api/terminal/session` (token ilə) → `200` və terminal m�
 
 ## 12. Gələcək: `api.unipos.tech`
 
-Çek sinxronu (`/api/sync`) və məhsul yaratma `api.unipos.tech`-dədir — ayrı server, **eyni baza**. O server də `terminal_sessions` cədvəlini oxuyub eyni tokeni qəbul edə bilər (`sha256(token)` → `token_hash`). Bu hələ edilməyib — o vaxta qədər tokeni `api.unipos.tech`-ə göndərməyin.
+Çek sinxronu (`/api/sync`) və məhsul yaratma `api.unipos.tech`-dədir — ayrı server, **eyni baza**. O server də `pos_auth_sessions` cədvəlini oxuyub eyni tokeni qəbul edə bilər (`sha256(token)` → `token_hash`). Bu hələ edilməyib — o vaxta qədər tokeni `api.unipos.tech`-ə göndərməyin.

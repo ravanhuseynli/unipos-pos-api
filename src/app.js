@@ -89,7 +89,7 @@ const startServer = async () => {
     // QR sifarişinin cədvəli və sütunları — yoxdursa özü yaradılır
     await ensureQrSchema();
 
-    // terminal_groups.terminal_type və terminal_sessions — yoxdursa özü yaradılır
+    // terminal_groups.terminal_type və pos_auth_sessions — yoxdursa özü yaradılır
     await ensureTerminalSchema();
 
     // Bağlanmış / uzun müddət istifadə olunmamış POS sessiyaları gündə bir dəfə silinir

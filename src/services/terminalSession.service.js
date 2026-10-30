@@ -57,14 +57,14 @@ const touch = (entry, ip) => {
     if (Date.now() - entry.lastUsedAt < TOUCH_INTERVAL_MS) return;
     entry.lastUsedAt = Date.now();
     pool.execute(
-        'UPDATE terminal_sessions SET last_used_at = NOW(), last_ip = ? WHERE id = ?',
+        'UPDATE pos_auth_sessions SET last_used_at = NOW(), last_ip = ? WHERE id = ?',
         [ip || null, entry.session.id]
     ).catch((err) => console.error('Terminal sessiyası yenilənmədi:', err.message));
 };
 
 async function revokeSession(sessionId, reason) {
     await pool.execute(
-        'UPDATE terminal_sessions SET revoked_at = NOW(), revoke_reason = ? WHERE id = ? AND revoked_at IS NULL',
+        'UPDATE pos_auth_sessions SET revoked_at = NOW(), revoke_reason = ? WHERE id = ? AND revoked_at IS NULL',
         [reason, sessionId]
     );
     for (const [hash, entry] of cache) {
@@ -77,7 +77,7 @@ async function createSession({ profileId, terminalGroupId, terminalId, terminalP
     const tokenHash = hashToken(token);
 
     await pool.execute(
-        `INSERT INTO terminal_sessions
+        `INSERT INTO pos_auth_sessions
             (token_hash, profile_id, terminal_group_id, terminal_id, password_fingerprint, device_name, created_ip, last_ip)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -115,7 +115,7 @@ async function verifySession(token, ip) {
                 tg.profile_id AS tg_profile_id, tg.terminal_id AS tg_terminal_id,
                 tg.terminal_password, tg.is_master,
                 p.username, p.is_working
-           FROM terminal_sessions s
+           FROM pos_auth_sessions s
            LEFT JOIN terminal_groups tg ON tg.id = s.terminal_group_id
            LEFT JOIN profiles p ON p.id = s.profile_id
           WHERE s.token_hash = ?
@@ -164,7 +164,7 @@ async function verifySession(token, ip) {
 
 async function cleanupSessions() {
     const [result] = await pool.query(
-        `DELETE FROM terminal_sessions
+        `DELETE FROM pos_auth_sessions
           WHERE (revoked_at IS NOT NULL AND revoked_at < NOW() - INTERVAL ? DAY)
              OR last_used_at < NOW() - INTERVAL ? DAY`,
         [CLEANUP_GRACE_DAYS, IDLE_DAYS + CLEANUP_GRACE_DAYS]

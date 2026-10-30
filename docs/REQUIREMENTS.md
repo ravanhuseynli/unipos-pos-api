@@ -19,6 +19,6 @@
 | 9 | POS login və REST sorğuları `https://pos-api.unipos.tech/api`-yə; QR sifariş socket-i `https://qrapi.unipos.tech`-ə. POS IP ünvanını (`46.224.8.157:35627`) işlətmir | İstifadəçi API-ni domenə keçirdi (2026-10-30); HTTPS — token və şifrə şəbəkədə açıq getmir. Eyni server olduğu üçün token socket-də də keçərlidir |
 
 **Əhatə xarici (sonraya):**
-- `api.unipos.tech` (çek sync, eyni baza) — eyni `terminal_sessions` cədvəli ilə tokeni qəbul edə bilər.
+- `api.unipos.tech` (çek sync, eyni baza) — eyni `pos_auth_sessions` cədvəli ilə tokeni qəbul edə bilər.
 - Login cavablarında `profile.password` (admin şifrəsi, açıq mətn) qaytarılır — POS `TerminalControlSocket` üçün istifadə edir, ona görə toxunulmayıb.
 - `terminal_password` bazada açıq mətndir (superadmin idarə edir).

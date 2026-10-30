@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS `terminal_sessions` (
+CREATE TABLE IF NOT EXISTS `pos_auth_sessions` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     -- Tokenin özü saxlanmır, yalnız SHA-256 hash-i (baza sızsa da token əldə olunmur)
     `token_hash` CHAR(64) NOT NULL,
@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS `terminal_sessions` (
     `revoked_at` DATETIME NULL DEFAULT NULL,
     `revoke_reason` VARCHAR(32) NULL DEFAULT NULL,
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uq_terminal_sessions_token` (`token_hash`),
-    KEY `idx_terminal_sessions_terminal` (`terminal_group_id`),
-    KEY `idx_terminal_sessions_profile` (`profile_id`),
-    KEY `idx_terminal_sessions_last_used` (`last_used_at`)
+    UNIQUE KEY `uq_pos_auth_sessions_token` (`token_hash`),
+    KEY `idx_pos_auth_sessions_terminal` (`terminal_group_id`),
+    KEY `idx_pos_auth_sessions_profile` (`profile_id`),
+    KEY `idx_pos_auth_sessions_last_used` (`last_used_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

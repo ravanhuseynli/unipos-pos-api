@@ -7,8 +7,10 @@ const { ensureColumns, ensureTable } = require('./qrSchema');
  *   - `terminal_groups.terminal_type` — terminalın növü; POS onu
  *     `POST /api/terminal/login` cavabında `data.terminal.terminal_type` kimi oxuyur.
  *     NULL — növ təyin olunmayıb.
- *   - `terminal_sessions` — POS sessiya tokenləri, `sql/terminal_sessions.sql`-dən
+ *   - `pos_auth_sessions` — POS sessiya tokenləri, `sql/pos_auth_sessions.sql`-dən
  *     (services/terminalSession.service.js).
+ *     DİQQƏT: ad `terminal_sessions` OLMAMALIDIR — o cədvəl eyni bazada superadmin-indir
+ *     (terminal onlayn statusu, unipos-new-superadmin/server/models/registerModels.js).
  *
  * ATMIR: alınmasa xəta yazılır və server yenə açılır — login `SELECT *` ilə
  * oxuyur, sütun olmasa `terminal_type: null` qaytarır; sessiya cədvəli yoxdursa
@@ -28,10 +30,10 @@ async function ensureTerminalSchema() {
     }
 
     try {
-        await ensureTable('terminal_sessions');
+        await ensureTable('pos_auth_sessions');
         console.log('✅ Terminal sessiya sxemi hazırdır');
     } catch (error) {
-        console.error('❌ terminal_sessions cədvəli yaradılmadı (sessiya tokeni verilməyəcək):', error.message);
+        console.error('❌ pos_auth_sessions cədvəli yaradılmadı (sessiya tokeni verilməyəcək):', error.message);
     }
 }
 
