@@ -15,7 +15,8 @@ Kodda / git-də görünməyən faktlar və səbəblər. Yeni fakt öyrənəndə 
   - Admin-in DB bağlantısı `backend/database/index.js`-də sabit yazılıb (env yox) — lokal test üçün harness `database/index.js`-i require.cache ilə əvəz edir.
   - `resolvePosProfile(...).viaCredentials` = "sorğu kassadandır" (şifrə **və ya** `pst_` nişanı) — kontrollerlər buna görə kassa formatı/qaydası seçir (`POST /pos/purchases` yalnız kassaya, `TableController`). Yeni kassa endpointi yazanda `viaCredentials`-a güvənin, `username` varlığına yox.
   - Kassanın şifrə ilə çağırdığı yollar: `services/posCredentials.js` (`/tables`, `/table-layouts`, `/pos/expenses`, `/pos/stock`, `/pos/purchases` …).
-- `46.224.8.157:8089` — POS-un istifadə etdiyi daha bir admin API (növbə/sifariş).
+- `46.224.8.157:8089` = `api.unipos.tech`-in **eyni prosesi** (HTTP; `/api/health` uptime eyni). POS bunu yalnız `SalesShiftController` və `OrderingController`-də (ikiqat göndərmə) işlədir — tarixi qalıq. `api.unipos.tech` TLS 1.2/1.3, etibarlı sertifikat (2026-10-31).
+- POS-da `backend/app.js:26` qlobal `rejectUnauthorized: false` (+ SyncService, MaxCheckService) — sertifikat yoxlanılmır, MITM ilə token oğurlana bilər. POS sənədində 9.2.
 - Lokal `.env` `localhost:3306/beta_unipos`-a baxır (MySQL servisi adətən sönülüdür).
 
 ## POS (klient) faktları — POS-ReDesing

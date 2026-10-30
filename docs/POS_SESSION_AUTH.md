@@ -175,6 +175,35 @@ const POS_API = 'https://pos-api.unipos.tech/api';
 
 QR sifariş socket-i: `https://qrapi.unipos.tech` (addım 6). Beləliklə POS bu API-yə IP ilə heç müraciət etmir.
 
+### 9.1 `46.224.8.157:8089` → `https://api.unipos.tech`
+
+`http://46.224.8.157:8089` admin backend-in **eyni prosesidir** (`/api/health` cavabında eyni `uptime_s` — yoxlanılıb), sadəcə şifrələnməmiş HTTP ilə. Token bura açıq mətnlə gedərdi. Dəyişin:
+
+| Fayl | İndi | Olmalıdır |
+|---|---|---|
+| `backend/controller/SalesShiftController.js:7` | `ADMIN_API = "http://46.224.8.157:8089/api"` | `"https://api.unipos.tech/api"` |
+| `backend/controller/OrderingController.js:4-5,47-48` | Eyni `PUT` həm `8089`-a, həm `api.unipos.tech`-ə **paralel** gedir (eyni server — iki dəfə yazılır) | Yalnız `https://api.unipos.tech/api` — `LOCAL_ADMIN_API` və onun `tryPut`-u silinsin |
+
+UniPOS-Lite-da eyni iki fayl var (`electron/backend/controller/OrderingController.js`, `SalesShiftController.js`).
+
+### 9.2 ⚠️ TLS sertifikat yoxlaması söndürülüb — açılmalıdır
+
+```js
+// backend/app.js:26 — BÜTÜN HTTPS sorğuları üçün
+axios.defaults.httpsAgent = new https.Agent({ rejectUnauthorized: false, minVersion: "TLSv1" });
+```
+
+Eyni ayar `services/SyncService.js:42` və `services/MaxCheckService.js:41`-də də var.
+
+`rejectUnauthorized: false` — sertifikat yoxlanılmır: şəbəkədə araya girən (ictimai Wi-Fi, saxta DNS) özünü `api.unipos.tech` / `pos-api.unipos.tech` kimi təqdim edib **tokeni, terminal şifrəsini və bütün məlumatı** oxuya bilər. HTTPS-in mənası qalmır.
+
+Səbəb kimi yazılan "api.unipos.tech köhnə TLS işlədir" artıq doğru deyil — `api.unipos.tech` TLS 1.2 və 1.3-ü etibarlı sertifikatla dəstəkləyir (2026-10-31 yoxlanılıb). Ona görə:
+
+- `app.js:26`-dakı qlobal agent **silinsin** (və ya `rejectUnauthorized: true`, `minVersion` göstərilməsin — Node-un defoltu TLS 1.2-dir);
+- `SyncService.js` və `MaxCheckService.js`-də `rejectUnauthorized: false` və `minVersion: "TLSv1"` silinsin (`keepAlive: false` qala bilər).
+
+Lokal şəbəkədəki vergi kassaları (`backend/taxs/*`) `http://IP:port` işlədir — bu dəyişiklik onlara təsir etmir.
+
 ## 10. Keçid planı
 
 1. ✅ Server `POS_AUTH_MODE=compat` ilə deploy olunur — heç nə sınmır.
@@ -194,6 +223,8 @@ QR sifariş socket-i: `https://qrapi.unipos.tech` (addım 6). Beləliklə POS bu
 - [ ] 401 / 403 davranışı (addım 7), offline-da token silinmir
 - [ ] Hardcoded JWT silinib
 - [ ] Login və REST sorğuları `https://pos-api.unipos.tech/api`-yə
+- [ ] `46.224.8.157:8089` → `https://api.unipos.tech/api`; OrderingController-də ikiqat göndərmə silinib (addım 9.1)
+- [ ] `rejectUnauthorized: false` / `minVersion: "TLSv1"` hər yerdən silinib (addım 9.2)
 - [ ] QR socket `https://qrapi.unipos.tech`-ə (`QR_SOCKET_DEFAULT_BASE`), IP override-ı nəzərə alınmır
 
 Test üçün: `GET /api/terminal/session` (token ilə) → `200` və terminal məlumatı; tokensiz → `401 token_missing`.
