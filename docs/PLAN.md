@@ -33,3 +33,4 @@ Hər addım və commit bura yazılır (ən yenisi aşağıda).
 | 2026-10-30 | Jurnala commit hash-i yazıldı | `a09d93c` |
 | 2026-10-30 | API `pos-api.unipos.tech`-ə keçirildi (istifadəçi). `/api/health` → 200, openresty; yeni kod hələ deploy olunmayıb (`/terminal/session` → 404). POS üçün login/REST → pos-api, QR socket köhnə ünvanda — POS_SESSION_AUTH.md, API_DOCUMENTATION, MEMORY, CLAUDE.md, REQUIREMENTS yeniləndi | `ccf56ae` |
 | 2026-10-30 | QR socket də IP-dən `https://qrapi.unipos.tech`-ə (istifadəçi). Yoxlandı: qrapi və pos-api üzərindən `/guest` websocket və polling serverə çatır. POS_SESSION_AUTH.md (addım 6, 9, yoxlama siyahısı), MEMORY, CLAUDE.md, API_DOCUMENTATION, REQUIREMENTS yeniləndi | `8d900f6` |
+| 2026-10-30 | `feat/pos-session-auth` → `main` fast-forward (konflikt yox, `main`-də itən commit yox), `origin/main`-ə push: `7eed8be..43d7cc6` | `43d7cc6` |
