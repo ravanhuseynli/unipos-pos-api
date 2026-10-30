@@ -14,7 +14,8 @@ Tələb: [`REQUIREMENTS.md` → R1](REQUIREMENTS.md). Branch: `feat/pos-session-
 - [x] Server: socket `/pos` — `auth: { token }`
 - [x] Server: login brute-force limiti (IP + restoran, 20 uğursuz / 15 dəq)
 - [x] Sənədlər: `API_DOCUMENTATION.md`, `docs/POS_SESSION_AUTH.md` (POS developeri üçün)
-- [ ] Deploy (`POS_AUTH_MODE=compat`), nginx arxasındadırsa `TRUST_PROXY=1`
+- [x] POS üçün domen: `https://pos-api.unipos.tech` (QR socket köhnə ünvanda qalır) — sənədlərə yazıldı
+- [ ] Deploy (`POS_AUTH_MODE=compat`, `TRUST_PROXY=1` — pos-api nginx/openresty arxasındadır)
 - [ ] POS inteqrasiyası (POS developeri, `docs/POS_SESSION_AUTH.md`)
 - [ ] Loglarda "POS tokensiz sorğular" itəndən sonra `POS_AUTH_MODE=strict`
 - [ ] (Sonra) `api.unipos.tech` eyni tokeni qəbul etsin
@@ -29,4 +30,5 @@ Hər addım və commit bura yazılır (ən yenisi aşağıda).
 | 2026-10-30 | Server tərəfi yazıldı (cədvəl, servis, middleware, route-lar, controller yoxlamaları, socket, limit) | `a0e5970` |
 | 2026-10-30 | Müvəqqəti MariaDB-də test: compat/strict, profile_mismatch, başqa restoranın çeki/itemi, split, şifrə dəyişikliyi → `password_changed`, 91 gün → `session_expired`, logout, `account_inactive` (sessiya qalır), rotasiya, slave login master tokenini bağlamır, socket token/köhnə giriş hər iki rejimdə, login limiti IP+restoran — hamısı keçdi | — |
 | 2026-10-30 | Sənədlər: API_DOCUMENTATION, POS_SESSION_AUTH.md, CLAUDE.md, docs/* | `a0e5970` |
-| 2026-10-30 | Jurnala commit hash-i yazıldı | (bu commit) |
+| 2026-10-30 | Jurnala commit hash-i yazıldı | `a09d93c` |
+| 2026-10-30 | API `pos-api.unipos.tech`-ə keçirildi (istifadəçi). `/api/health` → 200, openresty; yeni kod hələ deploy olunmayıb (`/terminal/session` → 404). POS üçün login/REST → pos-api, QR socket köhnə ünvanda — POS_SESSION_AUTH.md, API_DOCUMENTATION, MEMORY, CLAUDE.md yeniləndi | (bu commit) |

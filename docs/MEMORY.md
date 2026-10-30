@@ -4,7 +4,11 @@ Kodda / git-də görünməyən faktlar və səbəblər. Yeni fakt öyrənəndə 
 
 ## Mühit və serverlər
 
-- Bu API: `46.224.8.157:35627` (POS birbaşa HTTP ilə) və `https://qrapi.unipos.tech/api` (QR menyu, HTTPS — çox güman nginx arxasında). Nginx arxasında `.env`-də `TRUST_PROXY=1` olmalıdır, yoxsa rate limit bütün sorğuları bir IP sayır.
+- Bu API-nin ünvanları (hamısı eyni proses, eyni baza):
+  - `https://pos-api.unipos.tech/api` — **POS login və REST sorğuları** (2026-10-30-dan; openresty/nginx arxasında)
+  - `http://46.224.8.157:35627` — köhnə birbaşa ünvan; POS-un **QR sifariş socket-i** (`/pos`) burada qalır, şəkil URL-ləri də
+  - `https://qrapi.unipos.tech/api` — QR menyu (qr.unipos.tech)
+- Nginx arxasında `.env`-də `TRUST_PROXY=1` olmalıdır, yoxsa rate limit bütün sorğuları nginx-in IP-si sayır.
 - `api.unipos.tech` — ayrı backend (admin, `/api/sync`, məhsul yaratma, `pos-live` socket), **bu API ilə eyni bazanı** istifadə edir.
 - `46.224.8.157:8089` — POS-un istifadə etdiyi daha bir admin API (növbə/sifariş).
 - Lokal `.env` `localhost:3306/beta_unipos`-a baxır (MySQL servisi adətən sönülüdür).

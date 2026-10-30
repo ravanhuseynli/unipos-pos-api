@@ -1,6 +1,7 @@
 # POS sessiya tokeni — POS inteqrasiya təlimatı
 
-> Kimə: POS (Electron) developeri. Server: **UniPOS Node JS Api** (`46.224.8.157:35627` / `qrapi.unipos.tech`).
+> Kimə: POS (Electron) developeri. Server: **UniPOS Node JS Api** — POS üçün ünvan: **`https://pos-api.unipos.tech/api`**.
+> QR sifariş socket-i isə köhnə ünvanında qalır (addım 6).
 > Server tərəfi hazırdır və **köhnə POS-ları sındırmır** (`POS_AUTH_MODE=compat`). Bu sənəddəki dəyişikliklər POS-a edilməlidir.
 
 ## 1. Niyə
@@ -26,7 +27,7 @@ Profil deaktiv olanda (`is_working = 0`) sorğular `403 account_inactive` qaytar
 
 ## 3. Login — tokeni almaq və saxlamaq
 
-`LoginController.getLogin` artıq `POST /api/terminal/login` çağırır. Dəyişikliklər:
+`LoginController.getLogin` artıq `POST /api/terminal/login` çağırır (`http://46.224.8.157:35627/api/terminal/login`). Ünvan `https://pos-api.unipos.tech/api/terminal/login` olur. Dəyişikliklər:
 
 ```js
 const previousToken = await sessionStore.get(terminalId); // bu terminalın köhnə tokeni (yoxdursa null)
@@ -75,7 +76,7 @@ Bu API-yə gedən bütün sorğular üçün bir axios instance / interceptor:
 ```js
 // backend/utils/posApi.js
 const axios = require('axios');
-const POS_API = 'http://46.224.8.157:35627/api'; // bax: addım 9 (HTTPS)
+const POS_API = 'https://pos-api.unipos.tech/api';
 
 const posApi = axios.create({ baseURL: POS_API, timeout: 15000 });
 
@@ -98,7 +99,7 @@ module.exports = { posApi, POS_API };
 
 **Tokeni YALNIZ bu API-yə göndərin.** `api.unipos.tech`, `wpbot`, `sapi`, vergi (DataPay), səs (voice) və s. üçün bu interceptor istifadə olunmamalıdır.
 
-Hazırda bu API-yə müraciət edən yerlər (`46.224.8.157:35627` axtarışı ilə tapılıb) — hamısı `posApi`-yə keçməlidir:
+Hazırda bu API-yə müraciət edən yerlər (`46.224.8.157:35627/api` axtarışı ilə tapılıb) — hamısı `posApi`-yə (yəni `https://pos-api.unipos.tech/api`-yə) keçməlidir:
 
 | Fayl | Endpoint |
 |---|---|
@@ -113,10 +114,15 @@ Hazırda bu API-yə müraciət edən yerlər (`46.224.8.157:35627` axtarışı i
 | `router/AppRouter.js` | `/pos/active-orders` |
 | `controller/HotelController.js` | `FALLBACK_API` |
 | `services/SyncService.js` | `GET /health` (token lazım deyil, zərəri yoxdur) |
+| `front/src/redux/Slices/CouriersSlice.js` | baza ünvanı `http://46.224.8.157:35627/api` |
+
+**Dəyişməyənlər:** QR sifariş socket-i (`front/src/utils/qrSocket.js` → `QR_SOCKET_DEFAULT_BASE`) və şəkil ünvanları (`Pin.jsx`, `CheckMain.jsx`, `CustomerDisplay.jsx` → `http://46.224.8.157:35627/<fayl>`) köhnə ünvanda qalır.
 
 `profileId`-ni URL-də göndərməyə davam edin — server onu tokenin restoranı ilə müqayisə edir. Uyğun gəlməsə `403 profile_mismatch` (bu, POS-da bug deməkdir).
 
 ## 6. QR sifariş socket-i (`/pos` namespace)
+
+**Ünvan dəyişmir:** socket köhnə ünvanında qalır (`QR_SOCKET_DEFAULT_BASE = "http://46.224.8.157:35627"`). Bu, `pos-api.unipos.tech` ilə **eyni server və eyni bazadır** — `pos-api`-dən alınan token socket-də də keçərlidir. Dəyişən yalnız `auth` obyektidir.
 
 `front/src/utils/qrSocket.js` hazırda `{ restaurantName, terminalId, terminalPassword }` göndərir. Bu fayl **frontend**-dədir, token isə backend-də saxlanılır — tokeni frontend-ə ötürmək lazımdır (məs. `/login` cavabında `authResult.data.session_token` kimi qalsın, və ya IPC ilə). Slave-in frontendi də QR socket-ə qoşulursa, **öz** tokenini istifadə etməlidir (server sifarişi `is_master`-ə görə master kassaya yönləndirir). Token ilə:
 
@@ -150,15 +156,15 @@ Səssiz login sonsuz dövrəyə düşməsin: eyni xəta üçün ən çox 1 cəhd
 
 - `electron/backend/controller/LoginController.js:45-46` — `let token = "eyJhbGciOi..."` (hardcoded JWT, istifadə olunmur). Repo tarixçəsindən də silmək ideal olardı, amma token heç bir endpoint tərəfindən qəbul olunmadığı üçün kritik deyil.
 
-## 9. HTTPS (tövsiyə)
+## 9. Domen: `pos-api.unipos.tech` (HTTPS)
 
-POS bu API-yə `http://46.224.8.157:35627` ilə gedir — trafik şifrələnmir, eyni şəbəkədə olan biri tokeni (və login-də terminal şifrəsini) görə bilər. `qrapi.unipos.tech` eyni API-dir və HTTPS-dir:
+POS bu API-yə indiyə qədər `http://46.224.8.157:35627` ilə gedirdi — trafik şifrələnmirdi, eyni şəbəkədə olan biri tokeni və login-dəki terminal şifrəsini görə bilərdi. Login və bütün REST sorğuları üçün yeni ünvan:
 
 ```js
-const POS_API = 'https://qrapi.unipos.tech/api';
+const POS_API = 'https://pos-api.unipos.tech/api';
 ```
 
-Server tərəfində nginx arxasında işləyəndə `.env`-də `TRUST_PROXY=1` olmalıdır (login limiti real IP-ni görsün).
+QR socket-i istisnadır — köhnə ünvanda qalır (addım 6).
 
 ## 10. Keçid planı
 
@@ -177,7 +183,7 @@ Server tərəfində nginx arxasında işləyəndə `.env`-də `TRUST_PROXY=1` ol
 - [ ] `qrSocket.js` → `auth: { token }`
 - [ ] 401 / 403 davranışı (addım 7), offline-da token silinmir
 - [ ] Hardcoded JWT silinib
-- [ ] (Tövsiyə) `https://qrapi.unipos.tech/api`
+- [ ] Login və REST sorğuları `https://pos-api.unipos.tech/api`-yə, QR socket köhnə ünvanında
 
 Test üçün: `GET /api/terminal/session` (token ilə) → `200` və terminal məlumatı; tokensiz → `401 token_missing`.
 

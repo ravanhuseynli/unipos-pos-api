@@ -3,7 +3,10 @@
 ## Introduction
 Welcome to the UniPOS API documentation. This API serves as the backend for the UniPOS system, supporting both the Admin Panel and POS Terminals. It provides endpoints for authentication, order management, point-of-sale functionality, product management, and more.
 
-**Base URL**: `http://<your-server>/api`
+**Base URL**:
+- POS terminals: `https://pos-api.unipos.tech/api`
+- QR menu: `https://qrapi.unipos.tech/api`
+- Legacy direct address (POS QR-order socket `/pos`): `http://46.224.8.157:35627`
 **Current Version**: `1.0.0`
 **Content Type**: All requests and responses should use `application/json`.
 

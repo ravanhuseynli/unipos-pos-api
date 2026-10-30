@@ -16,6 +16,7 @@
 | 6 | QR menyunun endpoint-ləri açıq qalır, cavabları dəyişmir; **`cost_price` qalır** | Bəzi restoranlar maya qiymətinə satır; QR menyu (qr.unipos.tech) asılıdır |
 | 7 | Tək kassa həmişə master-dir; slave-lər login-i master-in backend-i vasitəsilə edir | POS kodu yoxlanılıb — MD-də master/slave qaydası |
 | 8 | Profil deaktivdirsə 403, amma sessiya silinmir | Abunəlik bərpa olunanda yenidən login lazım olmasın |
+| 9 | POS login və REST sorğuları `https://pos-api.unipos.tech/api`-yə; QR sifariş socket-i köhnə ünvanda (`46.224.8.157:35627`) qalır | İstifadəçi API-ni domenə keçirdi (2026-10-30); HTTPS — token və şifrə şəbəkədə açıq getmir. Eyni server olduğu üçün token socket-də də keçərlidir |
 
 **Əhatə xarici (sonraya):**
 - `api.unipos.tech` (çek sync, eyni baza) — eyni `terminal_sessions` cədvəli ilə tokeni qəbul edə bilər.
