@@ -13,6 +13,7 @@ Kodda / git-də görünməyən faktlar və səbəblər. Yeni fakt öyrənəndə 
   - Orada öz auth-u var: `backend/services/adminAuth.js` (`AUTH_ENFORCE=off|compat|strict`, panel nişanı 64 hex, `admin_sessions`), kirayəçi izolyasiyası `services/tenantGuard.js` + `utils/tenantModelMap.js`.
   - POS tokeni (`pst_`) orada `services/posSession.js` ilə yoxlanılır — qaydalar `src/services/terminalSession.service.js` ilə **eyni olmalıdır** (hash, fingerprint, 90 gün). Biri dəyişəndə o biri də.
   - Admin-in DB bağlantısı `backend/database/index.js`-də sabit yazılıb (env yox) — lokal test üçün harness `database/index.js`-i require.cache ilə əvəz edir.
+  - `resolvePosProfile(...).viaCredentials` = "sorğu kassadandır" (şifrə **və ya** `pst_` nişanı) — kontrollerlər buna görə kassa formatı/qaydası seçir (`POST /pos/purchases` yalnız kassaya, `TableController`). Yeni kassa endpointi yazanda `viaCredentials`-a güvənin, `username` varlığına yox.
   - Kassanın şifrə ilə çağırdığı yollar: `services/posCredentials.js` (`/tables`, `/table-layouts`, `/pos/expenses`, `/pos/stock`, `/pos/purchases` …).
 - `46.224.8.157:8089` — POS-un istifadə etdiyi daha bir admin API (növbə/sifariş).
 - Lokal `.env` `localhost:3306/beta_unipos`-a baxır (MySQL servisi adətən sönülüdür).
