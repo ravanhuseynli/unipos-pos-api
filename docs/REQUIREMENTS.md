@@ -18,7 +18,8 @@
 | 8 | Profil deaktivdirsə 403, amma sessiya silinmir | Abunəlik bərpa olunanda yenidən login lazım olmasın |
 | 9 | POS login və REST sorğuları `https://pos-api.unipos.tech/api`-yə; QR sifariş socket-i `https://qrapi.unipos.tech`-ə. POS IP ünvanını (`46.224.8.157:35627`) işlətmir | İstifadəçi API-ni domenə keçirdi (2026-10-30); HTTPS — token və şifrə şəbəkədə açıq getmir. Eyni server olduğu üçün token socket-də də keçərlidir |
 
+| 10 | Admin backend (`api.unipos.tech`, repo `../uniposnewadmin/unipos-admin-yeni`) eyni `pst_` tokenini POS yollarında qəbul edir; `POS_AUTH_MODE=compat\|strict` orada da var | İstifadəçi istəyi (2026-10-31). Admin-də artıq `AUTH_ENFORCE=off\|compat\|strict` var idi, amma POS yolları bütün rejimlərdə tokensiz açıq idi |
+
 **Əhatə xarici (sonraya):**
-- `api.unipos.tech` (çek sync, eyni baza) — eyni `pos_auth_sessions` cədvəli ilə tokeni qəbul edə bilər.
 - Login cavablarında `profile.password` (admin şifrəsi, açıq mətn) qaytarılır — POS `TerminalControlSocket` üçün istifadə edir, ona görə toxunulmayıb.
 - `terminal_password` bazada açıq mətndir (superadmin idarə edir).

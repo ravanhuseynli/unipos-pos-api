@@ -9,7 +9,11 @@ Kodda / git-də görünməyən faktlar və səbəblər. Yeni fakt öyrənəndə 
   - `https://qrapi.unipos.tech` — QR menyu (qr.unipos.tech) və POS-un **QR sifariş socket-i** (`/pos`, websocket — yoxlanılıb)
   - `http://46.224.8.157:35627` — köhnə birbaşa IP ünvanı; POS-da artıq işlədilməməlidir (şəkil URL-ləri hələ buradadır)
 - Nginx arxasında `.env`-də `TRUST_PROXY=1` olmalıdır, yoxsa rate limit bütün sorğuları nginx-in IP-si sayır.
-- `api.unipos.tech` — ayrı backend (admin, `/api/sync`, məhsul yaratma, `pos-live` socket), **bu API ilə eyni bazanı** istifadə edir.
+- `api.unipos.tech` (və `46.224.8.157:8089`) — admin backend, repo `../uniposnewadmin/unipos-admin-yeni` (GitHub `jumshudsoltanov/unipos-new-admin`, iş branch-i `redesign/web-admin-v2`; `origin/main` köhnədir). `/api/sync`, məhsul yaratma, `pos-live` socket. **Bu API ilə eyni baza.**
+  - Orada öz auth-u var: `backend/services/adminAuth.js` (`AUTH_ENFORCE=off|compat|strict`, panel nişanı 64 hex, `admin_sessions`), kirayəçi izolyasiyası `services/tenantGuard.js` + `utils/tenantModelMap.js`.
+  - POS tokeni (`pst_`) orada `services/posSession.js` ilə yoxlanılır — qaydalar `src/services/terminalSession.service.js` ilə **eyni olmalıdır** (hash, fingerprint, 90 gün). Biri dəyişəndə o biri də.
+  - Admin-in DB bağlantısı `backend/database/index.js`-də sabit yazılıb (env yox) — lokal test üçün harness `database/index.js`-i require.cache ilə əvəz edir.
+  - Kassanın şifrə ilə çağırdığı yollar: `services/posCredentials.js` (`/tables`, `/table-layouts`, `/pos/expenses`, `/pos/stock`, `/pos/purchases` …).
 - `46.224.8.157:8089` — POS-un istifadə etdiyi daha bir admin API (növbə/sifariş).
 - Lokal `.env` `localhost:3306/beta_unipos`-a baxır (MySQL servisi adətən sönülüdür).
 

@@ -97,7 +97,7 @@ posApi.interceptors.response.use(undefined, async (error) => {
 module.exports = { posApi, POS_API };
 ```
 
-**Tokeni YALNIZ bu API-yə göndərin.** `api.unipos.tech`, `wpbot`, `sapi`, vergi (DataPay), səs (voice) və s. üçün bu interceptor istifadə olunmamalıdır.
+**Tokeni YALNIZ iki serverə göndərin:** bu API (`pos-api.unipos.tech`, `qrapi.unipos.tech`) və admin backend (`api.unipos.tech`, `46.224.8.157:8089` — addım 12). `wpbot`, `sapi`, vergi (DataPay), səs (voice) və s. üçün bu interceptor istifadə olunmamalıdır.
 
 Hazırda bu API-yə müraciət edən yerlər (`46.224.8.157:35627/api` axtarışı ilə tapılıb) — hamısı `posApi`-yə (yəni `https://pos-api.unipos.tech/api`-yə) keçməlidir:
 
@@ -188,7 +188,8 @@ QR sifariş socket-i: `https://qrapi.unipos.tech` (addım 6). Beləliklə POS bu
 - [ ] Yenidən login-də köhnə token `Authorization`-da göndərilir (rotasiya)
 - [ ] Slave login-i master-in tokenini əvəz etmir
 - [ ] Bu API-yə gedən bütün sorğular `posApi` ilə (cədvəl, addım 5)
-- [ ] Token başqa serverlərə getmir
+- [ ] Token admin backend-ə (`api.unipos.tech`, `:8089`) də gedir (addım 12), `/pos-live` socket-i `auth: { token }`
+- [ ] Token üçüncü tərəf serverlərə (wpbot, sapi, DataPay, voice) getmir
 - [ ] `qrSocket.js` → `auth: { token }`
 - [ ] 401 / 403 davranışı (addım 7), offline-da token silinmir
 - [ ] Hardcoded JWT silinib
@@ -197,6 +198,30 @@ QR sifariş socket-i: `https://qrapi.unipos.tech` (addım 6). Beləliklə POS bu
 
 Test üçün: `GET /api/terminal/session` (token ilə) → `200` və terminal məlumatı; tokensiz → `401 token_missing`.
 
-## 12. Gələcək: `api.unipos.tech`
+## 12. Admin backend (`api.unipos.tech`) — eyni token
 
-Çek sinxronu (`/api/sync`) və məhsul yaratma `api.unipos.tech`-dədir — ayrı server, **eyni baza**. O server də `pos_auth_sessions` cədvəlini oxuyub eyni tokeni qəbul edə bilər (`sha256(token)` → `token_hash`). Bu hələ edilməyib — o vaxta qədər tokeni `api.unipos.tech`-ə göndərməyin.
+Çek sinxronu (`/sync`), məhsul yaratma, masalar, otel, növbə və `/pos-live` socket-i `api.unipos.tech`-dədir (ayrı server, **eyni baza**). O server də **eyni `session_token`-i** qəbul edir — ayrıca login yoxdur.
+
+- Bütün `https://api.unipos.tech/api/...` və `http://46.224.8.157:8089/api/...` sorğularına eyni header: `Authorization: Bearer <session_token>`.
+- Token orada yalnız POS-un istifadə etdiyi yollarda qəbul olunur (başqa yolda `403 pos_token_not_allowed`).
+- Restoran tokendən götürülür: başqa restoranın `profile_id`-si, başqa restoranın qeydi (`/products/:id`, `/tables/:id` …) və ya `/sync`-də `orders[].profile_id` başqa restorandırsa → `403 forbidden_tenant`.
+- Token göndərilən sorğularda gövdədəki `username` / `password` artıq lazım deyil.
+- `/pos-live` socket-i: `auth: { token: sessionToken, appVersion }` (köhnə `username`/`password` yerinə).
+- Xəta kodları addım 7-dəki ilə eynidir (`invalid_token`, `session_revoked`, `session_expired`, `account_inactive`, `token_missing`), əlavə olaraq `forbidden_tenant` (bug) və `pos_token_not_allowed` (bug — POS-un çağırmamalı olduğu yol).
+- Admin serverdə də `POS_AUTH_MODE=compat|strict` var — eyni keçid planı (addım 10).
+
+Fayl-fayl siyahı (hansı POS faylı admin backend-in hansı yolunu çağırır): admin reposunda `docs/POS_SESSION_TOKEN.md` → "POS developeri üçün".
+
+| POS faylı | Admin backend yolları |
+|---|---|
+| `services/SyncService.js` | `POST /sync`, `/pos/sync` |
+| `services/adminPosApi.js`, `OrdersItemsController.js`, `router/AppRouter.js` | `/pos/*` |
+| `services/MaxCheckService.js` | `/max-checks` |
+| `controller/SalesShiftController.js` | `/sales-shifts/...` |
+| `controller/ProductsController.js`, `data/ProductsData.js`, `controller/OrderingController.js` | `/products`, `/categories`, `/general-categories`, `.../ordering` |
+| `data/TablesData.js`, `controller/TablesController.js`, `services/TableLayoutSync.js`, `front/.../TablesSlice.js` | `/tables`, `/table-groups`, `/table-layouts` |
+| `data/WaitersData.js`, `data/PrintersData.js` | `/waiters`, `/printers` |
+| `front/.../CustomersSlice.js`, `CouriersSlice.js` | `/customers`, `/couriers` |
+| `controller/HotelController.js`, `data/RoomsData.js` | `/rooms`, `/room-groups`, `/bookings`, `/folios` |
+| `front/utils/receiptSettingsSync.js` | `GET /profiles?id=` |
+| `services/PosLiveSocket.js` | `/pos-live` socket |

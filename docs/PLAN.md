@@ -18,7 +18,8 @@ Tələb: [`REQUIREMENTS.md` → R1](REQUIREMENTS.md). Branch: `feat/pos-session-
 - [ ] Deploy (`POS_AUTH_MODE=compat`, `TRUST_PROXY=1` — pos-api nginx/openresty arxasındadır)
 - [ ] POS inteqrasiyası (POS developeri, `docs/POS_SESSION_AUTH.md`)
 - [ ] Loglarda "POS tokensiz sorğular" itəndən sonra `POS_AUTH_MODE=strict`
-- [ ] (Sonra) `api.unipos.tech` eyni tokeni qəbul etsin
+- [x] Admin backend (`api.unipos.tech`) eyni tokeni POS yollarında qəbul edir, `POS_AUTH_MODE` — admin repo `feat/pos-session-token` (`2fa8f72`), push gözləyir
+- [ ] Admin backend deploy (`POS_AUTH_MODE=compat`)
 
 ## Jurnal
 
@@ -35,3 +36,5 @@ Hər addım və commit bura yazılır (ən yenisi aşağıda).
 | 2026-10-30 | QR socket də IP-dən `https://qrapi.unipos.tech`-ə (istifadəçi). Yoxlandı: qrapi və pos-api üzərindən `/guest` websocket və polling serverə çatır. POS_SESSION_AUTH.md (addım 6, 9, yoxlama siyahısı), MEMORY, CLAUDE.md, API_DOCUMENTATION, REQUIREMENTS yeniləndi | `8d900f6` |
 | 2026-10-30 | `feat/pos-session-auth` → `main` fast-forward (konflikt yox, `main`-də itən commit yox), `origin/main`-ə push: `7eed8be..43d7cc6` | `43d7cc6` |
 | 2026-10-31 | Production deploy-da xəta: `Unknown column 'token_hash'` — `terminal_sessions` adı eyni bazada superadmin-in cədvəlidir (terminal onlayn statusu). Login compat-da işlədi, `session_token: null` qaytardı; superadmin məlumatına toxunulmadı. Cədvəl `pos_auth_sessions` adlandırıldı; lokal test superadmin formatlı cədvəllə: token yaranır, superadmin sətri dəyişmir | `b60d931` |
+| 2026-10-31 | Admin backend (`unipos-admin-yeni`, branch `feat/pos-session-token`): `services/posSession.js` (pos_auth_sessions-dan oxuyur), `adminAuth` — `pst_` yalnız POS yollarında + kassa-şifrə yolları (`/tables`, `/table-layouts`, `PATCH /folios/:id`, `GET /profiles`), checkTenant kassanın profili ilə, `/sync` massivlərində profile_id yoxlaması, `POS_AUTH_MODE`; posCredentials və `/pos-live` socket token. Test (harness, real middleware zənciri + test DB): 22 HTTP ssenari + 5 socket + şifrə dəyişikliyi/deaktiv/cədvəl yoxdur — hamısı keçdi | admin `2fa8f72` |
+| 2026-10-31 | POS_SESSION_AUTH.md: addım 5 və 12 — token admin backend-ə də gedir, fayl-yol cədvəli; REQUIREMENTS (10), MEMORY | (bu commit) |
