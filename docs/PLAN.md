@@ -18,7 +18,7 @@ Tələb: [`REQUIREMENTS.md` → R1](REQUIREMENTS.md). Branch: `feat/pos-session-
 - [ ] Deploy (`POS_AUTH_MODE=compat`, `TRUST_PROXY=1` — pos-api nginx/openresty arxasındadır)
 - [ ] POS inteqrasiyası (POS developeri, `docs/POS_SESSION_AUTH.md`)
 - [ ] Loglarda "POS tokensiz sorğular" itəndən sonra `POS_AUTH_MODE=strict`
-- [x] Admin backend (`api.unipos.tech`) eyni tokeni POS yollarında qəbul edir, `POS_AUTH_MODE` — admin repo `feat/pos-session-token` (`2fa8f72`), push gözləyir
+- [x] Admin backend (`api.unipos.tech`) eyni tokeni POS yollarında qəbul edir, `POS_AUTH_MODE` — admin `redesign/web-admin-v2`-yə push olundu (`2fa8f72`, `de8b95b`)
 - [ ] Admin backend deploy (`POS_AUTH_MODE=compat`)
 
 ## Jurnal
@@ -39,3 +39,4 @@ Hər addım və commit bura yazılır (ən yenisi aşağıda).
 | 2026-10-31 | Admin backend (`unipos-admin-yeni`, branch `feat/pos-session-token`): `services/posSession.js` (pos_auth_sessions-dan oxuyur), `adminAuth` — `pst_` yalnız POS yollarında + kassa-şifrə yolları (`/tables`, `/table-layouts`, `PATCH /folios/:id`, `GET /profiles`), checkTenant kassanın profili ilə, `/sync` massivlərində profile_id yoxlaması, `POS_AUTH_MODE`; posCredentials və `/pos-live` socket token. Test (harness, real middleware zənciri + test DB): 22 HTTP ssenari + 5 socket + şifrə dəyişikliyi/deaktiv/cədvəl yoxdur — hamısı keçdi | admin `2fa8f72` |
 | 2026-10-31 | POS_SESSION_AUTH.md: addım 5 və 12 — token admin backend-ə də gedir, fayl-yol cədvəli; REQUIREMENTS (10), MEMORY | `c99de82` |
 | 2026-10-31 | Admin: alış endpointləri (`ad1124c` — `/pos/suppliers`, `/pos/inventory-items`, `/pos/purchases`, `/pos/purchases/:id`) `/pos/` prefiksi ilə tokeni qəbul edir, amma `POST /pos/purchases` `viaCredentials` tələb etdiyi üçün tokenli kassaya 401 verirdi; TableController da kassa formatını/sahiblik yoxlamasını `viaCredentials`-a bağlayır. `resolvePosProfile` nişanlı sessiya üçün `viaCredentials: true`. `docs/POS_PURCHASES_API.md` yeniləndi | admin `de8b95b` |
+| 2026-10-31 | Push: Node API `main` `07bbcf0..1e1cdf6`; admin `redesign/web-admin-v2` `ad1124c..de8b95b` (fast-forward). Admin `origin/main` köhnədir və ortaq tarixçəsi yoxdur — ora push edilmədi (istifadəçi qərarı) | — |
