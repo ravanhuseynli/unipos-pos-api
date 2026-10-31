@@ -39,6 +39,7 @@ response = await axios.post(
     terminal_id: terminalId,
     terminal_password: password,
     device_name: os.hostname(),            // istəyə bağlı — sessiyanı tanımaq üçün
+    want_session: true,                    // MƏCBURİ: yoxdursa (və köhnə token da yoxdursa) session_token = null
   },
   {
     timeout: 15000,

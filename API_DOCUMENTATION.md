@@ -166,6 +166,7 @@ Authenticate a POS terminal and receive a POS session token (`data.session_token
 | `terminal_id` | string | Yes | The ID of the terminal to login. |
 | `terminal_password` | string | Yes | The password for the specific terminal. |
 | `device_name` | string | No | Free text shown in the session list (e.g. `"Kassa-1 / DESKTOP-AB12"`). |
+| `want_session` | boolean | No | `true` — issue a POS session token. Without it (and without a previous token in `Authorization`) `session_token` is `null`: old POS builds re-login every 5 minutes and must not create a session each time. |
 
 **Example Request**:
 ```json
@@ -202,6 +203,7 @@ Authenticate a POS terminal and receive a POS session token (`data.session_token
   }
 }
 ```
+- Send the previous `session_token` in `Authorization: Bearer …` on re-login: it is revoked if it belongs to the same terminal (rotation) and a new one is issued.
 - `session_token` — send it as `Authorization: Bearer <session_token>` on every POS request and in the `/pos` socket handshake (`auth: { token }`). Every login creates a new session; there is no limit per terminal. It is `null` only if the session could not be stored (compat mode keeps the login working).
 - `token` — legacy JWT, **deprecated**. No endpoint checks it; it stays only for compatibility.
 

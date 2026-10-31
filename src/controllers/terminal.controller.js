@@ -111,14 +111,19 @@ const terminalLogin = async (req, res) => {
 
         // POS sessiya tokeni — POS bütün sorğularda `Authorization: Bearer <session_token>` göndərir.
         // Cədvəl yoxdursa / yazılmadısa compat rejimində login yenə uğurludur (köhnə POS-lar sınmasın).
+        //
+        // Token YALNIZ onu istəyən klientə verilir: gövdədə `want_session: true` və ya köhnə token
+        // (`Authorization`). Köhnə POS hər 5 dəqiqədə login edir (blok yoxlaması) və tokeni
+        // istifadə etmir — hər login-də sessiya yaratsaq, cədvəl terminal başına gündə ~288 sətir böyüyür.
+        const previousToken = (req.headers.authorization || '').startsWith('Bearer ')
+            ? req.headers.authorization.slice(7).trim()
+            : null;
+        const wantsSession = [true, 1, '1', 'true'].includes(req.body.want_session) || Boolean(previousToken);
         let session = null;
-        try {
-            // Rotasiya: POS hər açılışda yenidən login edir. Köhnə tokenini göndəribsə və o
-            // ELƏ BU terminalındırsa, bağlanır — sessiyalar yığılmasın. Başqa terminalın
+        if (wantsSession) try {
+            // Rotasiya: POS hər açılışda / 5 dəqiqədə yenidən login edir. Köhnə tokenini göndəribsə
+            // və o ELƏ BU terminalındırsa, bağlanır — sessiyalar yığılmasın. Başqa terminalın
             // tokeni (məs. master slave-in login-ini ötürəndə öz tokenini qoşub) toxunulmur.
-            const previousToken = (req.headers.authorization || '').startsWith('Bearer ')
-                ? req.headers.authorization.slice(7).trim()
-                : null;
             if (previousToken) {
                 const previous = await verifySession(previousToken, req.ip).catch(() => null);
                 if (previous && previous.terminalGroupId === Number(terminal.id)) {

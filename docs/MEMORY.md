@@ -36,6 +36,7 @@ Kodda / git-də görünməyən faktlar və səbəblər. Yeni fakt öyrənəndə 
 ## POS sessiya mexanizmi — tələlər
 
 - Cədvəlin adı **`pos_auth_sessions`**-dır. `terminal_sessions` adı eyni bazada **superadmin-ə** məxsusdur (terminal onlayn statusu: `socket_id`, `online`, `last_seen_at`...). İlk deploy-da (2026-10-31) ad toqquşdu: `ensureTable` cədvəl var deyə yaratmadı, sorğular `Unknown column 'token_hash'` verdi, login `session_token: null` qaytardı. Superadmin məlumatına toxunulmadı (sütunlar olmadığı üçün bütün sorğular icradan əvvəl xəta verdi). Yeni cədvəl adı seçəndə bütün layihələrdə (`../unipos-new-superadmin`, admin backend) grep edin.
+- **POS hər 5 dəqiqədə login edir** (front `backgroundBlockCheck` → `authPos` → lokal `/login` → bu API `/terminal/login`), yalnız açılışda yox. Ona görə token yalnız `want_session: true` və ya köhnə token (`Authorization`) göndərənə verilir — əks halda köhnə POS-lar terminal başına gündə ~288 boş sessiya yaradırdı (2026-10-31 production-da görüldü).
 - Yoxlama nəticəsi 60 san keşdə qalır → şifrə dəyişikliyi / deaktivasiya ən gec 60 san sonra təsir edir.
 - Şifrə dəyişikliyini aşkar etmək: `password_fingerprint = sha256(token_hash:terminal_password)` — gizli açar lazım deyil, açar rotasiyası hamını çıxarmaz.
 - `last_used_at` ən çox saatda bir yenilənir (yazma yükü).
