@@ -25,7 +25,11 @@ Kodda / git-də görünməyən faktlar və səbəblər. Yeni fakt öyrənəndə 
 - POS hər açılışda yaddaşdakı məlumatlarla `authPos` → lokal backend `/login` → bu API `/terminal/login` edir. Yəni hər açılış = yeni login → **rotasiya** lazımdır (köhnə token `Authorization`-da gəlir, eyni terminaldırsa bağlanır).
 - Slave kassanın frontendi master-in backend-inə (`http://<masterIp>:55667/api`) qoşulur; slave login-i master-in `LoginController`-i vasitəsilə bu API-yə slave-in öz credentials-ı ilə gedir.
 - Master-slave rejimində bulud sorğularını master-in backend-i edir. Tək kassa həmişə master-dir.
-- `LoginController.js:45`-dəki hardcoded JWT heç yerdə istifadə olunmur (payload: profile 14, exp 2027-01-26).
+- `LoginController.js:45`-dəki hardcoded JWT heç yerdə istifadə olunmurdu — `feat/pos-session-auth`-da silindi.
+- POS reposu: `unipostech/POS-ReDesing` (GitHub), aktiv developer `jusmhudsoltanov`; bizim iş `feat/pos-session-auth` branch-ində (izah: o reponun `docs/SESSION_AUTH.md`). Electron 22 → Node 16. Backend asılılıqları repoda quraşdırılmayıb — test üçün scratchpad-a quraşdırılıb `NODE_PATH` ilə işlədilir; POS DB `UNIPOS_DB_*` env ilə dəyişdirilir.
+- POS lokal API (55667): `services/localAuth.js` — localhost etibarlı, LAN klienti master-in `/login`-indən `local_session_token` (`lpt_`) alır; rejim `POS_LOCAL_AUTH_MODE` / `app_settings.local_auth_mode` (compat defolt). Mobil tətbiq `http://mobile.unipos.tech` front build-ini açır — strict-dən əvvəl o da yenidən deploy olunmalıdır.
+- POS bulud nişanı: `backend/services/cloud.js` (backend, `app_settings.pos_cloud_session`, yalnız localhost login-də saxlanılır) və `front/src/utils/cloudAuth.js` (`authResult.data.session_token`). Nişan yalnız pos-api / qrapi / api.unipos.tech-ə gedir.
+- POS-da `exec` + istifadəçi dəyəri: `PrintersController` düzəldildi; `server/main.js`-dəki `exec`-lər yalnız Electron IPC-dən (LAN-dan yox) çağırılır.
 - POS-un istifadə etdiyi endpoint-lərin siyahısı: `docs/POS_SESSION_AUTH.md` → addım 5.
 - Bu API-nin `/orders/*`, `/pos/terminals`, `/terminal/me` endpoint-lərini heç bir məlum klient çağırmır.
 

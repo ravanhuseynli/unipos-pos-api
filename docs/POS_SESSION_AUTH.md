@@ -1,5 +1,7 @@
 # POS sessiya tokeni — POS inteqrasiya təlimatı
 
+> **2026-10-31:** POS tərəfi artıq yazılıb — `unipostech/POS-ReDesing`, branch `feat/pos-session-auth` (PR gözləyir), izah: o reponun `docs/SESSION_AUTH.md`. Bu sənəd server tərəfinin müqaviləsi kimi qalır.
+
 > Kimə: POS (Electron) developeri. Server: **UniPOS Node JS Api** — POS üçün ünvan: **`https://pos-api.unipos.tech/api`**.
 > QR sifariş socket-i üçün: **`https://qrapi.unipos.tech`** (addım 6). IP ünvanı (`46.224.8.157:35627`) heç yerdə istifadə olunmamalıdır.
 > Server tərəfi hazırdır və **köhnə POS-ları sındırmır** (`POS_AUTH_MODE=compat`). Bu sənəddəki dəyişikliklər POS-a edilməlidir.

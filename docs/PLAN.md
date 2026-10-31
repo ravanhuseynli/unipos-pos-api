@@ -16,7 +16,9 @@ Tələb: [`REQUIREMENTS.md` → R1](REQUIREMENTS.md). Branch: `feat/pos-session-
 - [x] Sənədlər: `API_DOCUMENTATION.md`, `docs/POS_SESSION_AUTH.md` (POS developeri üçün)
 - [x] POS üçün domen: login/REST → `https://pos-api.unipos.tech`, QR socket → `https://qrapi.unipos.tech` (IP yox) — sənədlərə yazıldı
 - [ ] Deploy (`POS_AUTH_MODE=compat`, `TRUST_PROXY=1` — pos-api nginx/openresty arxasındadır)
-- [ ] POS inteqrasiyası (POS developeri, `docs/POS_SESSION_AUTH.md`)
+- [x] POS inteqrasiyası — biz yazdıq: `unipostech/POS-ReDesing` `feat/pos-session-auth` (push olundu, PR gözləyir)
+- [ ] PR birləşdirilir → POS release (avto-yeniləmə) → mobile.unipos.tech deploy
+- [ ] POS lokal API `strict` (bütün kassalar + mobil yeniləndikdən sonra)
 - [ ] Loglarda "POS tokensiz sorğular" itəndən sonra `POS_AUTH_MODE=strict`
 - [x] Admin backend (`api.unipos.tech`) eyni tokeni POS yollarında qəbul edir, `POS_AUTH_MODE` — admin `redesign/web-admin-v2`-yə push olundu (`2fa8f72`, `de8b95b`)
 - [ ] Admin backend deploy (`POS_AUTH_MODE=compat`)
@@ -43,3 +45,5 @@ Hər addım və commit bura yazılır (ən yenisi aşağıda).
 | 2026-10-31 | POS-un xarici serverləri araşdırıldı. `8089` = `api.unipos.tech` eyni proses (health uptime); POS-da qlobal `rejectUnauthorized: false` aşkarlandı. POS_SESSION_AUTH.md 9.1 (8089 → api.unipos.tech, ikiqat ordering) və 9.2 (TLS yoxlamasını açmaq) | `b1e79da` |
 | 2026-10-31 | UniPOS-Lite istifadə olunmur (istifadəçi) — POS_SESSION_AUTH.md və CLAUDE.md-dən çıxarıldı, MEMORY-yə qeyd | `a1ce1dc` |
 | 2026-10-31 | POS araşdırması (3 paralel agent): lokal API (55667) tam açıqdır, `PUT /printers/:id`-də PowerShell injection, POS hər 5 dəq login edir, slave login master-in vəziyyətini dəyişir (istifadəçi: toxunma). Node API: sessiya yalnız `want_session: true` / köhnə token ilə verilir — test: köhnə POS → null, want_session → token, rotasiya işləyir | `498cc22` |
+| 2026-10-31 | POS `feat/pos-session-auth`: printer PowerShell injection (`e89db06`), ünvanlar IP → domen + ikiqat ordering (`505a2d7`), TLS yoxlaması (`5f8ea39`), bulud nişanı backend+front+socket-lər (`9542364`), lokal API/socket nişanı compat/strict (`fb30471`), təkrar LAN login-də lokal nişanın yenidən istifadəsi (`e894ba2`), `docs/SESSION_AUTH.md` (`34f892c`). Test: cloud interceptor (mock server), lokal API compat/strict HTTP+socket (LAN IP), tam login zənciri (real LoginController + test Node API), front `vite build`. Push: `origin/feat/pos-session-auth`; `gh` yoxdur — PR linki istifadəçiyə verildi | POS `34f892c` |
+| 2026-10-31 | Node API sənədləri: REQUIREMENTS (11–14), MEMORY (POS faktları), POS_SESSION_AUTH.md qeyd | (bu commit) |

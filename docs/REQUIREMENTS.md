@@ -20,6 +20,12 @@
 
 | 10 | Admin backend (`api.unipos.tech`, repo `../uniposnewadmin/unipos-admin-yeni`) eyni `pst_` tokenini POS yollarında qəbul edir; `POS_AUTH_MODE=compat\|strict` orada da var | İstifadəçi istəyi (2026-10-31). Admin-də artıq `AUTH_ENFORCE=off\|compat\|strict` var idi, amma POS yolları bütün rejimlərdə tokensiz açıq idi |
 
+| 11 | POS tərəfini də biz yazırıq (POS developeri yazmayacaq); POS-un öz lokal API-si (55667, LAN) də nişanla qorunur — `compat` indi, `strict` bütün kassalar + mobile.unipos.tech yeniləndikdən sonra | İstifadəçi istəyi (2026-10-31). Lokal API tam açıq idi; printer endpoint-ində LAN-dan komanda icrası |
+| 12 | Slave login-in master-in vəziyyətini dəyişməsi (terminal ID, is_master) düzəldilmir | İstifadəçi: "toxunma" (2026-10-31). Yalnız bulud nişanının saxlanılması localhost-a bağlandı |
+| 13 | POS-da TLS sertifikat yoxlaması açılır | İstifadəçi qərarı; Node 16 ilə 4 domen yoxlanılıb. Risk: HTTPS-i yoxlayan antivirus. Ayrıca commit — geri qaytarmaq asandır |
+| 14 | POS işi ayrıca branch + PR (`feat/pos-session-auth`) | POS reposunda başqa developer aktiv işləyir |
+
 **Əhatə xarici (sonraya):**
+- `sapi.unipos.tech` (superadmin): terminal-control socket admin şifrəsi ilə, push bildirişlərinin `X-API-Key`-i POS kodunda sabit yazılıb, `wpbot.unipos.tech` heç bir sirr olmadan.
 - Login cavablarında `profile.password` (admin şifrəsi, açıq mətn) qaytarılır — POS `TerminalControlSocket` üçün istifadə edir, ona görə toxunulmayıb.
 - `terminal_password` bazada açıq mətndir (superadmin idarə edir).
