@@ -19,6 +19,7 @@ const OPTIONAL = {
         'name_en', 'name_ru', 'qr_icon', 'qr_subtitle_az', 'qr_subtitle_en', 'qr_subtitle_ru',
     ],
     products: [
+        'name_en', 'name_ru',
         'qr_icon', 'qr_badge_az', 'qr_badge_en', 'qr_badge_ru',
         'qr_action_type', 'qr_action_value', 'qr_info_only',
     ],

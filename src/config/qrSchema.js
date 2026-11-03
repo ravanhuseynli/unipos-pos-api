@@ -107,6 +107,9 @@ const QR_MENU_COLUMNS = {
         { name: 'qr_subtitle_ru', definition: 'VARCHAR(255) NULL DEFAULT NULL' },
     ],
     products: [
+        // Məhsul adının tərcüməsi (kateqoriya kimi; boş → AZ `name`)
+        { name: 'name_en', definition: 'VARCHAR(255) NULL DEFAULT NULL' },
+        { name: 'name_ru', definition: 'VARCHAR(255) NULL DEFAULT NULL' },
         { name: 'qr_icon', definition: 'VARCHAR(40) NULL DEFAULT NULL' },
         { name: 'qr_badge_az', definition: 'VARCHAR(60) NULL DEFAULT NULL' },
         { name: 'qr_badge_en', definition: 'VARCHAR(60) NULL DEFAULT NULL' },

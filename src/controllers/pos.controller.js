@@ -340,6 +340,8 @@ const getMenuList = async (req, res) => {
                     are_orders_included: row.are_orders_included,
                     hourly_price: row.hourly_price,
                     printer: row.printer,
+                    // Ad tərcüməsi — yalnız dolu olanda (bütün restoranlar; kateqoriyadakı kimi)
+                    ...sparse({ name_en: row.product_name_en, name_ru: row.product_name_ru }),
                     // QR menyu — otel portalı sahələri (yalnız otel rejimində və yalnız dolu olanlar)
                     ...(isHotel ? sparse({
                         ordering: row.product_ordering,

@@ -95,6 +95,8 @@ const getHotelPortal = async (req, res) => {
             caption: tr(r, 'caption'),
             button: tr(r, 'button'),
             image: image(r.image),
+            // Video story (könüllü, `hotel_portal_stories.video`) — `image` onun posteridir
+            video: image(r.video),
             link_type: r.link_type || 'none',
             link_value: r.link_value || null,
         }));

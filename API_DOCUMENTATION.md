@@ -519,13 +519,17 @@ public, max-age=86400`; redirects to the file when `img_file` exists. In hotel m
                 "youtube": "https://…", "tiktok": null,
                 "feedback_image": "https://api.unipos.tech/uploads/…" },
   "stories": [ { "id": 3, "title": { … }, "caption": { … }, "button": { … },
-                 "image": "https://…", "link_type": "general_category", "link_value": "12" } ]
+                 "image": "https://…", "video": "https://…/story.mp4",
+                 "link_type": "general_category", "link_value": "12" } ]
 }
 ```
 
 | Field | Values |
 |---|---|
 | `stories[].link_type` | `none` `general_category` `category` `product` `url` `phone` `whatsapp` |
+| `stories[].video` | optional video URL (`hotel_portal_stories.video`, absolute); `image` stays as its poster. `null` = image story |
+
+`GET /pos/menu/:username` products also carry `name_en` / `name_ru` (product name translations) — only when filled.
 
 Stories are returned only when active, with an image, and today (Asia/Baku) is within
 `starts_on`–`ends_on` (empty = open). Hero texts are the hotel's own data. Empty
