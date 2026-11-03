@@ -36,6 +36,21 @@ function tr(row, prefix) {
     return out;
 }
 
+/** Hamısı boşdursa null — cavaba yazılmasın */
+function trOrNull(row, prefix) {
+    const t = tr(row, prefix);
+    return t.az || t.en || t.ru ? t : null;
+}
+
+/** null / undefined / '' dəyərli açarlar atılır (0 qalır — sıra 0 ola bilər) */
+function sparse(obj) {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+        if (v !== null && v !== undefined && v !== '') out[k] = v;
+    }
+    return out;
+}
+
 /**
  * @desc    Get printers by profile_id
  * @route   GET /api/pos/printers/:profileId
@@ -226,6 +241,10 @@ const getMenuList = async (req, res) => {
         `, [actualProfileId]);
 
         const menuMap = {};
+        // Otel portalı sahələri (sıra, ikon, nişan, hərəkət) yalnız otel rejimində göndərilir; qalan
+        // könüllü sahələr yalnız DOLU olanda — menyu cavabı bütün restoranlar üçün şişməsin
+        // (planşet tətbiqi də onu birbaşa yükləyir). QR Next olmayan sahəni boş sayır.
+        const isHotel = data.length > 0 && Number(data[0].is_hotel_mode) === 1;
 
         for (const row of data) {
             const cId = row.category_id;
@@ -237,13 +256,15 @@ const getMenuList = async (req, res) => {
                     name: row.category_name,
                     img: toImageValue(row.category_img_file, row.category_img),
                     category_discount: row.category_discount,
-                    // QR menyu (əlavə sahələr — köhnə klientlər nəzərə almır)
-                    general_category_id: row.category_general_id || null,
-                    ordering: row.category_ordering,
-                    name_en: row.category_name_en || null,
-                    name_ru: row.category_name_ru || null,
-                    qr_icon: row.category_qr_icon || null,
-                    qr_subtitle: tr(row, 'category_qr_subtitle'),
+                    // QR menyu (əlavə sahələr — köhnə klientlər nəzərə almır; yalnız dolu olanlar)
+                    ...sparse({
+                        general_category_id: isHotel ? row.category_general_id : null,
+                        ordering: isHotel ? row.category_ordering : null,
+                        name_en: row.category_name_en,
+                        name_ru: row.category_name_ru,
+                        qr_icon: isHotel ? row.category_qr_icon : null,
+                        qr_subtitle: isHotel ? trOrNull(row, 'category_qr_subtitle') : null
+                    }),
                     products: []
                 };
             }
@@ -265,13 +286,15 @@ const getMenuList = async (req, res) => {
                     are_orders_included: row.are_orders_included,
                     hourly_price: row.hourly_price,
                     printer: row.printer,
-                    // QR menyu — otel portalı sahələri (əlavə; köhnə klientlər nəzərə almır)
-                    ordering: row.product_ordering,
-                    qr_icon: row.product_qr_icon || null,
-                    qr_badge: tr(row, 'product_qr_badge'),
-                    qr_action_type: row.product_qr_action_type || null,
-                    qr_action_value: row.product_qr_action_value || null,
-                    qr_info_only: Number(row.product_qr_info_only) === 1 ? 1 : 0
+                    // QR menyu — otel portalı sahələri (yalnız otel rejimində və yalnız dolu olanlar)
+                    ...(isHotel ? sparse({
+                        ordering: row.product_ordering,
+                        qr_icon: row.product_qr_icon,
+                        qr_badge: trOrNull(row, 'product_qr_badge'),
+                        qr_action_type: row.product_qr_action_type,
+                        qr_action_value: row.product_qr_action_value,
+                        qr_info_only: Number(row.product_qr_info_only) === 1 ? 1 : null
+                    }) : {})
                 });
             }
         }
@@ -281,7 +304,8 @@ const getMenuList = async (req, res) => {
         // Üst kateqoriyalar — otel portalının plitələri, menyuda EN/RU ad. Şəkil YALNIZ fayl URL-i:
         // köhnə base64 `img` cavaba qoyulmur (menyu cavabı yenə 20 MB olmasın — bax MEMORY.md).
         let generalCategories = [];
-        try {
+        // Plitələr yalnız otel portalında lazımdır
+        if (isHotel) try {
             const [gRows] = await pool.execute(
                 `SELECT g.id, g.name, g.ordering${selectList(cols, 'general_categories', 'g', '')}
                    FROM general_categories g WHERE g.profile_id = ? ORDER BY g.ordering, g.id`,

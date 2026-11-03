@@ -492,6 +492,10 @@ category = row / tab, product = item. Full contract: admin repo `docs/hotel/QR_P
 | `menu[].products[]` | `ordering`, `qr_icon`, `qr_badge {az,en,ru}`, `qr_action_type` (`phone` `whatsapp` `email` `map` `url`), `qr_action_value`, `qr_info_only` (0/1 — info page, no price/cart) |
 | `general_categories[]` (new, top level) | `id`, `name`, `name_en`, `name_ru`, `ordering`, `img` (file URL only — never base64), `qr_icon`, `qr_subtitle {}`, `qr_layout` (`categories` `tabs` `list`) |
 
+Fields are **sparse**: only non-empty values are sent, and the hotel fields (`general_category_id`,
+`ordering`, `qr_*`, `general_categories`) only when `is_hotel_mode = 1` — a regular restaurant's
+response only gains `name_en`/`name_ru` on translated categories (the tablet app downloads it directly).
+
 The optional columns are created on start (`src/config/qrSchema.js`) and selected **only if they exist**
 (`src/config/menuColumns.js`, refreshed every 5 min) — a missing column never breaks the menu, the field is
 simply absent / null.
