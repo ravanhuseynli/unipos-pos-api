@@ -40,7 +40,9 @@ Kodda / git-də görünməyən faktlar və səbəblər. Yeni fakt öyrənəndə 
 
 ## Otel QR portalı (2026-11-03)
 
-- `hotel_portal_*` cədvəllərini admin backend yaradır və yazır (`ensureHotelPortalSchema`), bu API yalnız oxuyur. Ad toqquşması yoxlanılıb (superadmin, admin, bu API).
+- `hotel_portal_*` cədvəllərini admin backend yaradır və yazır (`ensureHotelPortalSchema`), bu API yalnız oxuyur. Ad toqquşması yoxlanılıb (superadmin, admin, bu API). `hotel_portal_sections/items` artıq işlədilmir — portal menyunun özüdür (`general_categories` → `categories` → `products`).
+- Menyu cavabındakı könüllü sütunlar (`name_en`, `qr_*`, `general_categories.img_file`) `config/menuColumns.js` ilə yalnız mövcud olduqda seçilir — test: sütunlar silinəndə menyu yenə 200 qaytarır, sahə null.
+- `general_categories.img` köhnə base64-dür — QR cavabına QOYULMUR (yalnız `img_file` URL), menyu cavabı şişməsin.
 - `hotel.controller.js` şəkil URL-ləri üçün `pos.controller.js`-in `toImageValue`-unu işlədir (export olundu).
 - Lokal test (müvəqqəti MariaDB): otel deyil → 404, deaktiv bölmə/sətir və deaktiv valideynin uşağı gizlənir, cədvəl yoxdursa boş məzmun.
 

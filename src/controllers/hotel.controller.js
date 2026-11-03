@@ -4,15 +4,14 @@ const { toImageValue } = require('./pos.controller');
 /**
  * Otel QR portalı — QR qonağı üçün açıq, yalnız oxuyur.
  *
- * Məzmunu admin panel yazır (`hotel_portal_*` cədvəlləri, admin backend `ensureHotelPortalSchema`).
+ * Portalın plitələri və siyahıları MENYUNUN ÖZÜDÜR (GET /pos/menu → general_categories, menu[] QR
+ * sahələri ilə). Bu endpoint yalnız portalın öz parametrlərini (hero, sosial, rəy banneri) və bu gün
+ * (Bakı) aktiv olan story-ləri qaytarır. Yazan admin backend-dir (`hotel_portal_settings` / `_stories`).
  * Müqavilə: admin repo `docs/hotel/QR_PORTAL_CONTRACT.md`.
  *
  * `profiles.is_hotel_mode != 1` → 404 { hotel:false } — otel olmayan restoranlar üçün heç nə qaytarılmır.
- * Cədvəllər hələ yaradılmayıbsa (admin backend yenilənməyib) boş məzmun qaytarılır, xəta yox:
- * QR portalın qabığı (hero, sosial) onsuz da göstərilə bilir.
+ * Cədvəllər hələ yaradılmayıbsa boş məzmun qaytarılır, xəta yox.
  */
-
-const SECTION_KEYS = ['info', 'fnb', 'spa', 'entertainment', 'contacts', 'specials'];
 
 /** Story tarixləri otelin yerli günüdür — server UTC-dədir, gecə 00:00–04:00 arası səhv gün olardı */
 const bakuToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Baku' });
@@ -43,7 +42,7 @@ async function queryOrEmpty(sql, params) {
 }
 
 /**
- * @desc    Otel qonaq portalı (bölmələr, sətirlər, parametrlər)
+ * @desc    Otel qonaq portalı — parametrlər və story-lər
  * @route   GET /api/hotel/:username   (rəqəmli id də qəbul olunur)
  */
 const getHotelPortal = async (req, res) => {
@@ -62,13 +61,8 @@ const getHotelPortal = async (req, res) => {
         }
 
         const today = bakuToday();
-        const [settingsRows, sectionRows, itemRows, storyRows] = await Promise.all([
+        const [settingsRows, storyRows] = await Promise.all([
             queryOrEmpty('SELECT * FROM hotel_portal_settings WHERE profile_id = ? LIMIT 1', [profile.id]),
-            queryOrEmpty('SELECT * FROM hotel_portal_sections WHERE profile_id = ?', [profile.id]),
-            queryOrEmpty(
-                'SELECT * FROM hotel_portal_items WHERE profile_id = ? AND is_active = 1 ORDER BY sort_order, id',
-                [profile.id]
-            ),
             // Yalnız bu gün (Bakı) aralığa düşən aktiv story-lər; tarixsiz story həmişə görünür
             queryOrEmpty(
                 `SELECT * FROM hotel_portal_stories
@@ -95,44 +89,6 @@ const getHotelPortal = async (req, res) => {
             feedback_image: image(s?.feedback_image),
         };
 
-        // Sətri olmayan bölmə aktiv sayılır və standart yerində qalır
-        const byKey = new Map(sectionRows.map((r) => [r.section_key, r]));
-        const sections = SECTION_KEYS.map((k, i) => {
-            const row = byKey.get(k);
-            return {
-                key: k,
-                active: row ? Number(row.is_active) === 1 : true,
-                order: row ? Number(row.sort_order) || 0 : i,
-                title: tr(row, 'title'),
-                subtitle: tr(row, 'subtitle'),
-                image: image(row?.image),
-            };
-        })
-            .filter((x) => x.active)
-            .sort((a, b) => a.order - b.order || SECTION_KEYS.indexOf(a.key) - SECTION_KEYS.indexOf(b.key))
-            .map(({ active, order, ...rest }) => rest);
-
-        // Deaktiv valideynin uşaqları da gizlənir; deaktiv bölmənin sətirləri qaytarılmır
-        const activeSections = new Set(sections.map((x) => x.key));
-        const topIds = new Set(itemRows.filter((r) => !r.parent_id).map((r) => r.id));
-        const items = itemRows
-            .filter((r) => activeSections.has(r.section_key) && (!r.parent_id || topIds.has(r.parent_id)))
-            .map((r) => ({
-                id: r.id,
-                section: r.section_key,
-                parent_id: r.parent_id || null,
-                title: tr(r, 'title'),
-                subtitle: tr(r, 'subtitle'),
-                badge: tr(r, 'badge'),
-                body: tr(r, 'body'),
-                image: image(r.image),
-                icon: r.icon || null,
-                tag: r.tag || null,
-                action_type: r.action_type || 'page',
-                action_value: r.action_value || null,
-                menu_category_id: r.menu_category_id || null,
-            }));
-
         const stories = storyRows.map((r) => ({
             id: r.id,
             title: tr(r, 'title'),
@@ -143,7 +99,7 @@ const getHotelPortal = async (req, res) => {
             link_value: r.link_value || null,
         }));
 
-        res.json({ hotel: true, settings, sections, items, stories });
+        res.json({ hotel: true, settings, stories });
     } catch (error) {
         console.error('GetHotelPortal error:', error);
         res.status(500).json({ error: 'Server error' });

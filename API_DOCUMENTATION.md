@@ -480,16 +480,25 @@ Retrieve all currently open/active orders for a profile.
 - **List**: `GET /pos/reviews/:id` (id is profile id)
 
 ### 6.6 Hotel guest portal (public)
-`GET /hotel/:username` — *username or numeric profile id.* Content is managed in the
-web admin (Hotel → QR portal) and stored in `hotel_portal_settings`,
-`hotel_portal_sections`, `hotel_portal_items` (owned by the admin backend). Full
-contract: admin repo `docs/hotel/QR_PORTAL_CONTRACT.md`.
+The portal's tiles and lists are **the menu itself**: top category (`general_categories`) = tile,
+category = row / tab, product = item. Full contract: admin repo `docs/hotel/QR_PORTAL_CONTRACT.md`.
 
+**Additions to `GET /pos/menu/:profileId`** (existing fields unchanged; other clients ignore them):
+
+| Where | Fields |
+|---|---|
+| `profile` | `is_hotel_mode` |
+| `menu[]` (category) | `general_category_id`, `ordering`, `name_en`, `name_ru`, `qr_icon`, `qr_subtitle {az,en,ru}` |
+| `menu[].products[]` | `ordering`, `qr_icon`, `qr_badge {az,en,ru}`, `qr_action_type` (`phone` `whatsapp` `email` `map` `url`), `qr_action_value`, `qr_info_only` (0/1 — info page, no price/cart) |
+| `general_categories[]` (new, top level) | `id`, `name`, `name_en`, `name_ru`, `ordering`, `img` (file URL only — never base64), `qr_icon`, `qr_subtitle {}`, `qr_layout` (`categories` `tabs` `list`) |
+
+The optional columns are created on start (`src/config/qrSchema.js`) and selected **only if they exist**
+(`src/config/menuColumns.js`, refreshed every 5 min) — a missing column never breaks the menu, the field is
+simply absent / null.
+
+**`GET /hotel/:username`** — *username or numeric profile id.* Portal settings and today's stories.
 - `404 { "hotel": false }` — unknown profile or `is_hotel_mode != 1`.
-- `200` — only active sections/items (an item under an inactive parent is hidden),
-  sorted by `sort_order, id`. Every text is `{ az, en, ru }` (empty → `null`; the QR
-  app falls back to `az`). Images are absolute URLs (`UPLOADS_BASE_URL`). If the
-  tables do not exist yet, `sections` contains the 6 defaults and `items` is empty.
+- `200`:
 
 ```json
 {
@@ -501,28 +510,17 @@ contract: admin repo `docs/hotel/QR_PORTAL_CONTRACT.md`.
                 "youtube": "https://…", "tiktok": null,
                 "feedback_image": "https://api.unipos.tech/uploads/…" },
   "stories": [ { "id": 3, "title": { … }, "caption": { … }, "button": { … },
-                 "image": "https://…", "link_type": "section", "link_value": "fnb" } ],
-  "sections": [ { "key": "info", "title": { "az": null, "en": null, "ru": null },
-                  "subtitle": { "az": null, "en": null, "ru": null }, "image": null } ],
-  "items": [ { "id": 4, "section": "fnb", "parent_id": null,
-               "title": { "az": "SHIRVAN", "en": null, "ru": null },
-               "subtitle": { … }, "badge": { … }, "body": { … },
-               "image": "https://…", "icon": "utensils", "tag": "fnb",
-               "action_type": "page", "action_value": null, "menu_category_id": 12 } ]
+                 "image": "https://…", "link_type": "general_category", "link_value": "12" } ]
 }
 ```
 
 | Field | Values |
 |---|---|
-| `sections[].key` | `info` `fnb` `spa` `entertainment` `contacts` `specials` |
-| `items[].action_type` | `page` `phone` `whatsapp` `email` `map` `url` `menu` |
-| `items[].tag` | `fnb` `spa` `ent` or `null` (QR shows tabs when a section has 2+ tags) |
-| `stories[].link_type` | `none` `section` `item` `menu` `url` `phone` `whatsapp` |
+| `stories[].link_type` | `none` `general_category` `category` `product` `url` `phone` `whatsapp` |
 
-Stories (Instagram-style bubbles at the top of the portal) are returned only when active,
-with an image, and today (Asia/Baku) is within `starts_on`–`ends_on` (empty = open).
-Hero texts (`hero_subtitle`, `tagline`) are the hotel's own data, not fixed design text.
-Empty `instagram`/`facebook`/`tiktok` → the QR app uses the profile's value.
+Stories are returned only when active, with an image, and today (Asia/Baku) is within
+`starts_on`–`ends_on` (empty = open). Hero texts are the hotel's own data. Empty
+`instagram`/`facebook`/`tiktok` → the QR app uses the profile's value.
 
 ---
 

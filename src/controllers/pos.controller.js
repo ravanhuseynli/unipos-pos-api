@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const { menuColumns, selectList } = require('../config/menuColumns');
 
 /**
  * Şəkil fayllarının serverdəki kökü (admin backend `/uploads`-u static verir).
@@ -23,6 +24,16 @@ function toImageValue(imgFile, legacyImg) {
         return `${UPLOADS_BASE_URL}/${p.replace(/^\//, '')}`;
     }
     return legacyImg;
+}
+
+/** `prefix_az/_en/_ru` sütunları → { az, en, ru } (boş → null) */
+function tr(row, prefix) {
+    const out = {};
+    for (const l of ['az', 'en', 'ru']) {
+        const v = row[`${prefix}_${l}`];
+        out[l] = v !== null && v !== undefined && String(v).trim() ? String(v) : null;
+    }
+    return out;
 }
 
 /**
@@ -146,6 +157,9 @@ const getMenuList = async (req, res) => {
             actualProfileId = profiles[0].id;
         }
 
+        // Könüllü sütunlar (EN/RU ad, otel portalı sahələri) — yalnız bazada olanlar seçilir
+        const cols = await menuColumns();
+
         const [data] = await pool.execute(`
             SELECT
                 ac.id AS profile_id, 
@@ -180,6 +194,8 @@ const getMenuList = async (req, res) => {
                 c.img AS category_img,
                 c.img_file AS category_img_file,
                 c.discount AS category_discount,
+                c.general_categorie_id AS category_general_id,
+                c.ordering AS category_ordering${selectList(cols, 'categories', 'c', 'category_')},
                 p.id AS product_id,
                 p.name AS product_name,
                 p.price AS product_price,
@@ -195,7 +211,8 @@ const getMenuList = async (req, res) => {
                 p.timer_intervals,
                 p.are_orders_included,
                 p.hourly_price,
-                pr.local_name AS printer
+                pr.local_name AS printer,
+                p.ordering AS product_ordering${selectList(cols, 'products', 'p', 'product_')}
             FROM profiles ac
             LEFT JOIN categories c ON c.profile_id = ac.id
             -- Məhsul da bu restoranın olmalıdır: başqa profilin məhsulu bu profilin
@@ -220,6 +237,13 @@ const getMenuList = async (req, res) => {
                     name: row.category_name,
                     img: toImageValue(row.category_img_file, row.category_img),
                     category_discount: row.category_discount,
+                    // QR menyu (əlavə sahələr — köhnə klientlər nəzərə almır)
+                    general_category_id: row.category_general_id || null,
+                    ordering: row.category_ordering,
+                    name_en: row.category_name_en || null,
+                    name_ru: row.category_name_ru || null,
+                    qr_icon: row.category_qr_icon || null,
+                    qr_subtitle: tr(row, 'category_qr_subtitle'),
                     products: []
                 };
             }
@@ -240,12 +264,43 @@ const getMenuList = async (req, res) => {
                     timer_intervals: typeof row.timer_intervals === 'string' ? JSON.parse(row.timer_intervals) : row.timer_intervals,
                     are_orders_included: row.are_orders_included,
                     hourly_price: row.hourly_price,
-                    printer: row.printer
+                    printer: row.printer,
+                    // QR menyu — otel portalı sahələri (əlavə; köhnə klientlər nəzərə almır)
+                    ordering: row.product_ordering,
+                    qr_icon: row.product_qr_icon || null,
+                    qr_badge: tr(row, 'product_qr_badge'),
+                    qr_action_type: row.product_qr_action_type || null,
+                    qr_action_value: row.product_qr_action_value || null,
+                    qr_info_only: Number(row.product_qr_info_only) === 1 ? 1 : 0
                 });
             }
         }
 
         const menu = Object.values(menuMap);
+
+        // Üst kateqoriyalar — otel portalının plitələri, menyuda EN/RU ad. Şəkil YALNIZ fayl URL-i:
+        // köhnə base64 `img` cavaba qoyulmur (menyu cavabı yenə 20 MB olmasın — bax MEMORY.md).
+        let generalCategories = [];
+        try {
+            const [gRows] = await pool.execute(
+                `SELECT g.id, g.name, g.ordering${selectList(cols, 'general_categories', 'g', '')}
+                   FROM general_categories g WHERE g.profile_id = ? ORDER BY g.ordering, g.id`,
+                [actualProfileId]
+            );
+            generalCategories = gRows.map((g) => ({
+                id: g.id,
+                name: g.name,
+                name_en: g.name_en || null,
+                name_ru: g.name_ru || null,
+                ordering: g.ordering,
+                img: g.img_file ? toImageValue(g.img_file, null) : null,
+                qr_icon: g.qr_icon || null,
+                qr_subtitle: tr(g, 'qr_subtitle'),
+                qr_layout: g.qr_layout || null
+            }));
+        } catch (error) {
+            console.error('GetMenuList general_categories:', error.message);
+        }
 
         let profile = {};
         if (data.length > 0) {
@@ -299,7 +354,7 @@ const getMenuList = async (req, res) => {
             };
         }
 
-        res.json({ profile, menu });
+        res.json({ profile, menu, general_categories: generalCategories });
     } catch (error) {
         console.error('GetMenuList error:', error);
         res.status(500).json({ error: 'Server error' });

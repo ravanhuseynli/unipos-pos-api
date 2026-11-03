@@ -39,7 +39,7 @@ Məzmun web admin paneldən idarə olunur; otel olmayan restoranlara heç nə d�
 | # | Qərar | Səbəb |
 |---|---|---|
 | 1 | Bu API yalnız oxuyur: `GET /api/hotel/:username`; cədvəllərin sahibi admin backend-dir | Yazan bir yer olsun, sxem iki yerdə ayrılmasın |
-| 2 | `GET /pos/menu` cavabına yalnız `profile.is_hotel_mode` əlavə olundu | QR `/<u>`-da hansı görünüşü göstərəcəyini bilsin; mövcud sahələr dəyişmir |
+| 2 | `GET /pos/menu` cavabına `profile.is_hotel_mode` əlavə olundu (sonra — qərar 11) | QR `/<u>`-da hansı görünüşü göstərəcəyini bilsin; mövcud sahələr dəyişmir |
 | 3 | `is_hotel_mode` sütunu başlanğıcda `ensureColumns` ilə təmin olunur | Menyu sorğusu onu SELECT edir — sütun olmasa bütün menyular düşərdi |
 | 4 | Cədvəllər yoxdursa boş məzmun, 500 yox | Admin backend gec deploy olunsa portal yenə açılır |
 | 5 | Mətnlər `{az,en,ru}`; məhsullar tərcümə olunmur | İstifadəçi qərarı: «məhsullardan başqa hər şey 3 dildə» |
@@ -48,5 +48,8 @@ Məzmun web admin paneldən idarə olunur; otel olmayan restoranlara heç nə d�
 | 8 | Instagram tipli story-lər (`stories[]`), tarix aralığı Bakı vaxtı ilə API-də süzülür | Müştəri istəyi: «bugünün menyusu, bu gün hansı əyləncə» yuxarıda reklam kimi |
 | 9 | Hero mətnləri (alt başlıq, şüar) və hero loqosu otelin öz məlumatıdır; sosial sıra maketdəki 5-i | İstifadəçi: «Pirgulu, Hotel & Spa restoran məlumatıdır» |
 | 10 | Otel rejimini yalnız superadmin dəyişir — admin backend `PUT /profiles/:id` `is_hotel_mode`-u atır | İstifadəçi qərarı |
+| 11 | **Portal menyunun özüdür**: plitə = üst kateqoriya, sətir = kateqoriya, içi = məhsul; `GET /pos/menu`-ya `general_categories` və QR sahələri əlavə olundu, `GET /hotel` yalnız parametrlər + story-lər | İstifadəçi (2026-11-03): «bunlar bizim kateqoriyalar və üst kateqoriyalar olacaq, içində məhsullar; mövcud funksionallıqdan istifadə olunsun» |
+| 12 | Kateqoriya / üst kateqoriya adlarının EN/RU tərcüməsi (`name_en`, `name_ru`) — bütün restoranlar | İstifadəçi: «kateqoriyalara dil əlavə edə bilərsən» |
+| 13 | Könüllü sütunlar yalnız mövcud olduqda SELECT olunur (`config/menuColumns.js`) | Menyu sorğusu bütün restoranlarındır — deploy ardıcıllığı səhv olsa da düşməsin |
 
 Müqavilə: admin repo `docs/hotel/QR_PORTAL_CONTRACT.md`.

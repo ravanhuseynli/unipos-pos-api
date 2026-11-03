@@ -85,6 +85,38 @@ const ensureTable = async (table) => {
     }
 };
 
+// QR menyu sahələri — admin backend-in `ensureQrMenuFields` ilə EYNİ tərif (hansı birinci işə düşsə, o yaradır).
+// GET /pos/menu onları yalnız mövcud olduqda seçir (config/menuColumns.js), ona görə alınmasa menyu düşmür.
+const QR_MENU_COLUMNS = {
+    general_categories: [
+        { name: 'img_file', definition: 'VARCHAR(255) NULL DEFAULT NULL' },
+        { name: 'name_en', definition: 'VARCHAR(255) NULL DEFAULT NULL' },
+        { name: 'name_ru', definition: 'VARCHAR(255) NULL DEFAULT NULL' },
+        { name: 'qr_icon', definition: 'VARCHAR(40) NULL DEFAULT NULL' },
+        { name: 'qr_subtitle_az', definition: 'VARCHAR(160) NULL DEFAULT NULL' },
+        { name: 'qr_subtitle_en', definition: 'VARCHAR(160) NULL DEFAULT NULL' },
+        { name: 'qr_subtitle_ru', definition: 'VARCHAR(160) NULL DEFAULT NULL' },
+        { name: 'qr_layout', definition: 'VARCHAR(20) NULL DEFAULT NULL' },
+    ],
+    categories: [
+        { name: 'name_en', definition: 'VARCHAR(255) NULL DEFAULT NULL' },
+        { name: 'name_ru', definition: 'VARCHAR(255) NULL DEFAULT NULL' },
+        { name: 'qr_icon', definition: 'VARCHAR(40) NULL DEFAULT NULL' },
+        { name: 'qr_subtitle_az', definition: 'VARCHAR(255) NULL DEFAULT NULL' },
+        { name: 'qr_subtitle_en', definition: 'VARCHAR(255) NULL DEFAULT NULL' },
+        { name: 'qr_subtitle_ru', definition: 'VARCHAR(255) NULL DEFAULT NULL' },
+    ],
+    products: [
+        { name: 'qr_icon', definition: 'VARCHAR(40) NULL DEFAULT NULL' },
+        { name: 'qr_badge_az', definition: 'VARCHAR(60) NULL DEFAULT NULL' },
+        { name: 'qr_badge_en', definition: 'VARCHAR(60) NULL DEFAULT NULL' },
+        { name: 'qr_badge_ru', definition: 'VARCHAR(60) NULL DEFAULT NULL' },
+        { name: 'qr_action_type', definition: 'VARCHAR(20) NULL DEFAULT NULL' },
+        { name: 'qr_action_value', definition: 'VARCHAR(500) NULL DEFAULT NULL' },
+        { name: 'qr_info_only', definition: 'TINYINT(1) NOT NULL DEFAULT 0' },
+    ],
+};
+
 async function ensureQrSchema() {
     try {
         await ensureColumns('profiles', PROFILE_COLUMNS);
@@ -93,6 +125,16 @@ async function ensureQrSchema() {
         console.log('✅ QR sifariş sxemi hazırdır');
     } catch (error) {
         console.error('❌ QR sifariş sxemi hazırlanmadı (QR sifarişi işləməyəcək):', error.message);
+    }
+
+    try {
+        for (const [table, columns] of Object.entries(QR_MENU_COLUMNS)) {
+            // eslint-disable-next-line no-await-in-loop
+            await ensureColumns(table, columns);
+        }
+        console.log('✅ QR menyu sahələri hazırdır');
+    } catch (error) {
+        console.error('❌ QR menyu sahələri hazırlanmadı (tərcümə / otel sahələri cavabda olmayacaq):', error.message);
     }
 
     try {
