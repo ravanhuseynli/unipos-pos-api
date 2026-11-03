@@ -36,6 +36,58 @@ function tr(row, prefix) {
     return out;
 }
 
+/**
+ * Köhnə base64 şəklin (img_file boş) fayl kimi verildiyi nisbi yol. QR Next onu API domeninə bağlayır
+ * və öz optimallaşdırıcısı ilə kiçildir. `v` — şəkil dəyişəndə URL də dəyişsin (keş).
+ */
+function legacyImagePath(kind, id, img) {
+    if (typeof img !== 'string') return null;
+    const m = img.slice(0, 40).match(/^data:(image\/[a-z0-9.+-]+);base64,/i);
+    if (!m || !LEGACY_IMAGE_TYPES.has(m[1].toLowerCase())) return null;
+    return `/api/pos/legacy-image/${kind}/${id}?v=${img.length}`;
+}
+
+const LEGACY_IMAGE_TABLES = { category: 'categories', 'general-category': 'general_categories' };
+// SVG verilmir: API domenində açılan SVG skript işlədə bilər; optimallaşdırıcı da SVG qəbul etmir
+const LEGACY_IMAGE_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']);
+
+/**
+ * @desc    Köhnə base64 kateqoriya / üst kateqoriya şəklini fayl kimi verir (otel QR portalı)
+ * @route   GET /api/pos/legacy-image/:kind/:id   (kind: category | general-category)
+ *
+ * Menyu cavabına 100+ KB-lıq base64 qoymaq əvəzinə portal bu URL-i işlədir. img_file varsa
+ * həmin fayla yönləndirir. Açıqdır — menyu məlumatı onsuz da açıqdır.
+ */
+const getLegacyImage = async (req, res) => {
+    try {
+        const table = LEGACY_IMAGE_TABLES[req.params.kind];
+        const id = Number(req.params.id);
+        if (!table || !Number.isInteger(id) || id <= 0) return res.status(404).end();
+
+        const [rows] = await pool.execute(`SELECT img, img_file FROM ${table} WHERE id = ? LIMIT 1`, [id]);
+        const row = rows[0];
+        if (!row) return res.status(404).end();
+        if (row.img_file) return res.redirect(302, toImageValue(row.img_file, null));
+
+        const m = typeof row.img === 'string' ? row.img.match(/^data:(image\/[a-z0-9.+-]+);base64,/i) : null;
+        if (!m || !LEGACY_IMAGE_TYPES.has(m[1].toLowerCase())) return res.status(404).end();
+        const buf = Buffer.from(row.img.slice(m[0].length), 'base64');
+        if (!buf.length) return res.status(404).end();
+
+        res.set({
+            'Content-Type': m[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : m[1].toLowerCase(),
+            'Cache-Control': 'public, max-age=86400',
+            'X-Content-Type-Options': 'nosniff',
+            // helmet CORP `same-origin` qoyur — QR (başqa domen) şəkli <img>-də göstərə bilsin
+            'Cross-Origin-Resource-Policy': 'cross-origin'
+        });
+        return res.send(buf);
+    } catch (error) {
+        console.error('GetLegacyImage error:', error);
+        return res.status(500).end();
+    }
+};
+
 /** Hamısı boşdursa null — cavaba yazılmasın */
 function trOrNull(row, prefix) {
     const t = tr(row, prefix);
@@ -263,7 +315,9 @@ const getMenuList = async (req, res) => {
                         name_en: row.category_name_en,
                         name_ru: row.category_name_ru,
                         qr_icon: isHotel ? row.category_qr_icon : null,
-                        qr_subtitle: isHotel ? trOrNull(row, 'category_qr_subtitle') : null
+                        qr_subtitle: isHotel ? trOrNull(row, 'category_qr_subtitle') : null,
+                        // Köhnə base64 şəkil (img_file yoxdur) — portal onu fayl kimi bu yoldan alır
+                        qr_img: isHotel && !row.category_img_file ? legacyImagePath('category', cId, row.category_img) : null
                     }),
                     products: []
                 };
@@ -307,7 +361,9 @@ const getMenuList = async (req, res) => {
         // Plitələr yalnız otel portalında lazımdır
         if (isHotel) try {
             const [gRows] = await pool.execute(
-                `SELECT g.id, g.name, g.ordering${selectList(cols, 'general_categories', 'g', '')}
+                `SELECT g.id, g.name, g.ordering,
+                        CASE WHEN g.img LIKE 'data:image/%' AND g.img NOT LIKE 'data:image/svg%' THEN CHAR_LENGTH(g.img) ELSE 0 END AS legacy_img_len
+                        ${selectList(cols, 'general_categories', 'g', '')}
                    FROM general_categories g WHERE g.profile_id = ? ORDER BY g.ordering, g.id`,
                 [actualProfileId]
             );
@@ -317,7 +373,10 @@ const getMenuList = async (req, res) => {
                 name_en: g.name_en || null,
                 name_ru: g.name_ru || null,
                 ordering: g.ordering,
-                img: g.img_file ? toImageValue(g.img_file, null) : null,
+                // Fayl şəkli — tam URL; köhnə base64 — fayl kimi verən yol (cavaba base64 qoyulmur)
+                img: g.img_file
+                    ? toImageValue(g.img_file, null)
+                    : g.legacy_img_len > 0 ? `/api/pos/legacy-image/general-category/${g.id}?v=${g.legacy_img_len}` : null,
                 qr_icon: g.qr_icon || null,
                 qr_subtitle: tr(g, 'qr_subtitle'),
                 qr_layout: g.qr_layout || null
@@ -869,6 +928,7 @@ module.exports = {
     createReview,
     getMaxChecks,
     updateMaxChecks,
+    getLegacyImage,
     // Otel portalı (hotel.controller.js) eyni şəkil qaydası ilə tam URL qaytarır
     toImageValue
 };

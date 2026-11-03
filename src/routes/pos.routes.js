@@ -23,7 +23,8 @@ const {
     getReviews,
     createReview,
     getMaxChecks,
-    updateMaxChecks
+    updateMaxChecks,
+    getLegacyImage
 } = require('../controllers/pos.controller');
 
 const {
@@ -35,6 +36,8 @@ const {
 // Public — QR menyu (unipos-qr-next, planşet tətbiqi) və köhnə login.
 // Bu route-lar `router.use(posAuth)`-dan ƏVVƏL olmalıdır.
 router.get('/menu/:profileId', getMenuList);
+// Otel QR portalı — köhnə base64 kateqoriya şəkli fayl kimi (menyu cavabı şişməsin)
+router.get('/legacy-image/:kind/:id', getLegacyImage);
 router.get('/reviews/:id', getReviews);
 router.post('/reviews', createReview);
 router.post('/profile', terminalLoginLimiter, getProfile);

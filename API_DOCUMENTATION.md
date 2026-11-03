@@ -500,6 +500,11 @@ The optional columns are created on start (`src/config/qrSchema.js`) and selecte
 (`src/config/menuColumns.js`, refreshed every 5 min) — a missing column never breaks the menu, the field is
 simply absent / null.
 
+**`GET /pos/legacy-image/:kind/:id`** (`kind`: `category` | `general-category`) — serves an old base64
+category image (no `img_file`) as a real image file (jpeg/png/webp/gif; SVG refused), `Cache-Control:
+public, max-age=86400`; redirects to the file when `img_file` exists. In hotel mode categories carry
+`qr_img` and general categories `img` as this relative path, so the menu response never embeds base64.
+
 **`GET /hotel/:username`** — *username or numeric profile id.* Portal settings and today's stories.
 - `404 { "hotel": false }` — unknown profile or `is_hotel_mode != 1`.
 - `200`:
