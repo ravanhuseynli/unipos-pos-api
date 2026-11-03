@@ -29,3 +29,24 @@
 - `sapi.unipos.tech` (superadmin): terminal-control socket admin şifrəsi ilə, push bildirişlərinin `X-API-Key`-i POS kodunda sabit yazılıb, `wpbot.unipos.tech` heç bir sirr olmadan.
 - Login cavablarında `profile.password` (admin şifrəsi, açıq mətn) qaytarılır — POS `TerminalControlSocket` üçün istifadə edir, ona görə toxunulmayıb.
 - `terminal_password` bazada açıq mətndir (superadmin idarə edir).
+
+## R2 — Otel rejimi: QR qonaq portalı (2026-11-03)
+
+**İstək:** `profiles.is_hotel_mode = 1` olan obyektlərdə QR-ın giriş səhifəsi otel dizaynına keçsin
+(otel məlumatı, qida və içki, spa, əyləncə, əlaqə, günün təklifi, rəy, sosial şəbəkələr, AZ/EN/RU).
+Məzmun web admin paneldən idarə olunur; otel olmayan restoranlara heç nə dəyişməsin.
+
+| # | Qərar | Səbəb |
+|---|---|---|
+| 1 | Bu API yalnız oxuyur: `GET /api/hotel/:username`; cədvəllərin sahibi admin backend-dir | Yazan bir yer olsun, sxem iki yerdə ayrılmasın |
+| 2 | `GET /pos/menu` cavabına yalnız `profile.is_hotel_mode` əlavə olundu | QR `/<u>`-da hansı görünüşü göstərəcəyini bilsin; mövcud sahələr dəyişmir |
+| 3 | `is_hotel_mode` sütunu başlanğıcda `ensureColumns` ilə təmin olunur | Menyu sorğusu onu SELECT edir — sütun olmasa bütün menyular düşərdi |
+| 4 | Cədvəllər yoxdursa boş məzmun, 500 yox | Admin backend gec deploy olunsa portal yenə açılır |
+| 5 | Mətnlər `{az,en,ru}`; məhsullar tərcümə olunmur | İstifadəçi qərarı: «məhsullardan başqa hər şey 3 dildə» |
+| 6 | Qida və içki məkanları otelin özünündür (ayrı filial deyil) — sətir + istəyə görə menyu kateqoriyası | İstifadəçi qərarı |
+| 7 | «Rəy bildirin» mövcud `/review` səhifəsidir (giriş tələb edir) | İstifadəçi qərarı |
+| 8 | Instagram tipli story-lər (`stories[]`), tarix aralığı Bakı vaxtı ilə API-də süzülür | Müştəri istəyi: «bugünün menyusu, bu gün hansı əyləncə» yuxarıda reklam kimi |
+| 9 | Hero mətnləri (alt başlıq, şüar) və hero loqosu otelin öz məlumatıdır; sosial sıra maketdəki 5-i | İstifadəçi: «Pirgulu, Hotel & Spa restoran məlumatıdır» |
+| 10 | Otel rejimini yalnız superadmin dəyişir — admin backend `PUT /profiles/:id` `is_hotel_mode`-u atır | İstifadəçi qərarı |
+
+Müqavilə: admin repo `docs/hotel/QR_PORTAL_CONTRACT.md`.

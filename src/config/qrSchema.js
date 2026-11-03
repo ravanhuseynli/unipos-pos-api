@@ -11,7 +11,7 @@ const { pool } = require('./database');
  *   - `qr_phone_otps` — nömrə təsdiq kodları, `sql/qr_phone_otps.sql`-dən
  *   - `qr_users.phone_verified_at` — nömrə WhatsApp kodu ilə təsdiqlənibsə
  *   - `qr_users.token_version` — şifrə dəyişəndə artır, köhnə tokenlər keçmir (utils/qrUserToken.js)
- *   - `profiles.is_qr_order_*`, `profiles.is_qr_landing` — superadmin də eyni sütunları əlavə edir; hansı
+ *   - `profiles.is_qr_order_*`, `profiles.is_qr_landing`, `profiles.is_hotel_mode` — superadmin də eyni sütunları əlavə edir; hansı
  *     birinci işə düşsə, o yaradır
  *
  * Təkrar işə salmaq təhlükəsizdir. İki server nüsxəsi eyni anda ALTER etsə,
@@ -29,6 +29,9 @@ const PROFILE_COLUMNS = [
     { name: 'is_qr_order_direct', definition: 'INT NOT NULL DEFAULT 0' },
     // Defolt 1 — mövcud restoranlarda landing qalsın (superadmin ilə eyni tərif)
     { name: 'is_qr_landing', definition: 'INT NOT NULL DEFAULT 1' },
+    // Otel rejimi — superadmin / admin backend də eyni sütunu yaradır (TINYINT(4), defolt 0).
+    // GET /pos/menu bu sütunu SELECT edir: yoxdursa bütün menyular düşərdi, ona görə burada da təmin olunur.
+    { name: 'is_hotel_mode', definition: 'TINYINT(4) NOT NULL DEFAULT 0' },
 ];
 
 // `sql/qr_orders.sql`-ə sonradan əlavə olunan sütunlar — köhnə cədvəldə də olsun

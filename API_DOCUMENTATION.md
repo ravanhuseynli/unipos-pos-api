@@ -433,6 +433,13 @@ The column is created on server start if missing (`src/config/qrSchema.js`).
 }
 ```
 
+#### Hotel mode
+
+`profile.is_hotel_mode` — set by the superadmin (`0`/`1`). `1`: the QR menu shows
+the hotel guest-services portal at `/<restaurant>` (content from `GET /hotel/:username`,
+see 6.6); the food menu stays at `/<restaurant>/menu`. The column is ensured on
+server start (`src/config/qrSchema.js`).
+
 ### 6.3 POS Configuration Lists (GET)
 Retrieve POS configuration lists by Profile ID. All use **GET** method.
 - **Payment Methods**: `/pos/payment-methods/:profileId`
@@ -471,6 +478,51 @@ Retrieve all currently open/active orders for a profile.
 ### 6.5 Reviews
 - **Create**: `POST /pos/reviews` - Body: `{ "business": "admin_user", "rating": 5, "comment": "Great!" }`
 - **List**: `GET /pos/reviews/:id` (id is profile id)
+
+### 6.6 Hotel guest portal (public)
+`GET /hotel/:username` — *username or numeric profile id.* Content is managed in the
+web admin (Hotel → QR portal) and stored in `hotel_portal_settings`,
+`hotel_portal_sections`, `hotel_portal_items` (owned by the admin backend). Full
+contract: admin repo `docs/hotel/QR_PORTAL_CONTRACT.md`.
+
+- `404 { "hotel": false }` — unknown profile or `is_hotel_mode != 1`.
+- `200` — only active sections/items (an item under an inactive parent is hidden),
+  sorted by `sort_order, id`. Every text is `{ az, en, ru }` (empty → `null`; the QR
+  app falls back to `az`). Images are absolute URLs (`UPLOADS_BASE_URL`). If the
+  tables do not exist yet, `sections` contains the 6 defaults and `items` is empty.
+
+```json
+{
+  "hotel": true,
+  "settings": { "tagline": { "az": "Hotel & Spa", "en": null, "ru": null },
+                "hero_subtitle": { "az": "Pirgulu", "en": null, "ru": null },
+                "hero_logo": null, "stars": 5, "whatsapp": "994505551234",
+                "instagram": null, "tripadvisor": null, "facebook": null,
+                "youtube": "https://…", "tiktok": null,
+                "feedback_image": "https://api.unipos.tech/uploads/…" },
+  "stories": [ { "id": 3, "title": { … }, "caption": { … }, "button": { … },
+                 "image": "https://…", "link_type": "section", "link_value": "fnb" } ],
+  "sections": [ { "key": "info", "title": { "az": null, "en": null, "ru": null },
+                  "subtitle": { "az": null, "en": null, "ru": null }, "image": null } ],
+  "items": [ { "id": 4, "section": "fnb", "parent_id": null,
+               "title": { "az": "SHIRVAN", "en": null, "ru": null },
+               "subtitle": { … }, "badge": { … }, "body": { … },
+               "image": "https://…", "icon": "utensils", "tag": "fnb",
+               "action_type": "page", "action_value": null, "menu_category_id": 12 } ]
+}
+```
+
+| Field | Values |
+|---|---|
+| `sections[].key` | `info` `fnb` `spa` `entertainment` `contacts` `specials` |
+| `items[].action_type` | `page` `phone` `whatsapp` `email` `map` `url` `menu` |
+| `items[].tag` | `fnb` `spa` `ent` or `null` (QR shows tabs when a section has 2+ tags) |
+| `stories[].link_type` | `none` `section` `item` `menu` `url` `phone` `whatsapp` |
+
+Stories (Instagram-style bubbles at the top of the portal) are returned only when active,
+with an image, and today (Asia/Baku) is within `starts_on`–`ends_on` (empty = open).
+Hero texts (`hero_subtitle`, `tagline`) are the hotel's own data, not fixed design text.
+Empty `instagram`/`facebook`/`tiktok` → the QR app uses the profile's value.
 
 ---
 

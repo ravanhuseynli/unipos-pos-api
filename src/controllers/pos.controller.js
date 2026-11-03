@@ -155,6 +155,7 @@ const getMenuList = async (req, res) => {
                 ac.is_menu,
                 ac.is_menu_block,
                 ac.is_qr_landing,
+                ac.is_hotel_mode,
                 ac.next_payment_date,
                 ac.background_img,
                 ac.address,
@@ -258,6 +259,8 @@ const getMenuList = async (req, res) => {
                 is_menu_block: data[0].is_menu_block,
                 // Superadmin → QR landing səhifəsi. 1 = `/<restoran>` landing göstərir, 0 = birbaşa menyu.
                 is_qr_landing: data[0].is_qr_landing,
+                // Superadmin → otel rejimi. 1 = `/<restoran>` otel qonaq portalı göstərir (GET /api/hotel/:username)
+                is_hotel_mode: data[0].is_hotel_mode,
                 next_payment_date: data[0].next_payment_date,
                 background_img: data[0].background_img,
                 address: data[0].address,
@@ -786,5 +789,7 @@ module.exports = {
     getReviews,
     createReview,
     getMaxChecks,
-    updateMaxChecks
+    updateMaxChecks,
+    // Otel portalı (hotel.controller.js) eyni şəkil qaydası ilə tam URL qaytarır
+    toImageValue
 };

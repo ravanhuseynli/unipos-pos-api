@@ -38,6 +38,12 @@ Kodda / git-də görünməyən faktlar və səbəblər. Yeni fakt öyrənəndə 
 
 - İstifadə etdiyi endpoint-lər: `GET /pos/menu/:username`, `GET /modifiers/:profileId`, `/qr-orders/*`, `/qr-auth/*`. Planşet tətbiqi də `/pos/menu`. Köhnə "Unipos QR menu" `/pos/reviews` istifadə edir.
 
+## Otel QR portalı (2026-11-03)
+
+- `hotel_portal_*` cədvəllərini admin backend yaradır və yazır (`ensureHotelPortalSchema`), bu API yalnız oxuyur. Ad toqquşması yoxlanılıb (superadmin, admin, bu API).
+- `hotel.controller.js` şəkil URL-ləri üçün `pos.controller.js`-in `toImageValue`-unu işlədir (export olundu).
+- Lokal test (müvəqqəti MariaDB): otel deyil → 404, deaktiv bölmə/sətir və deaktiv valideynin uşağı gizlənir, cədvəl yoxdursa boş məzmun.
+
 ## POS sessiya mexanizmi — tələlər
 
 - Cədvəlin adı **`pos_auth_sessions`**-dır. `terminal_sessions` adı eyni bazada **superadmin-ə** məxsusdur (terminal onlayn statusu: `socket_id`, `online`, `last_seen_at`...). İlk deploy-da (2026-10-31) ad toqquşdu: `ensureTable` cədvəl var deyə yaratmadı, sorğular `Unknown column 'token_hash'` verdi, login `session_token: null` qaytardı. Superadmin məlumatına toxunulmadı (sütunlar olmadığı üçün bütün sorğular icradan əvvəl xəta verdi). Yeni cədvəl adı seçəndə bütün layihələrdə (`../unipos-new-superadmin`, admin backend) grep edin.
