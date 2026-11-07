@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { isValidPhone, PHONE_FORMAT_MESSAGE } = require('../utils/phone');
 const { signQrUserToken } = require('../utils/qrUserToken');
 const { sendOtp: sendOtpCode, verifyOtp, markOtpUsed, isOtpRequired, OtpError, PURPOSES } = require('../services/qrOtp.service');
+const accounts = require('../services/customerAccount.service');
 
 /**
  * Nömrə limitləri üçün qonağın IP-si. Proxy arxasında `trust proxy` (TRUST_PROXY)
@@ -14,6 +15,32 @@ const clientIp = (req) =>
 
 const otpErrorResponse = (res, error) =>
     res.status(error.status).json({ success: false, code: error.code, message: error.message, ...error.extra });
+
+/**
+ * Nömrənin hesabı varmı. Vahid hesab aktivdirsə: customer_accounts (mobil tətbiqdə / client.unipos.tech-də
+ * açılmış hesab da sayılır) və ya hələ köçürülməmiş köhnə QR hesabı; əks halda yalnız qr_users.
+ */
+const phoneHasAccount = async (nomre) => {
+    if (accounts.isReady()) {
+        if (await accounts.accountByPhone(pool, accounts.normalizePhone(nomre))) return true;
+        return Boolean(await accounts.unlinkedQrUser(pool, nomre));
+    }
+    const [rows] = await pool.execute('SELECT id FROM qr_users WHERE nomre = ?', [nomre]);
+    return rows.length > 0;
+};
+
+/** bcrypt müqayisəsi — saxlanmış dəyər heş deyilsə (pozuq / boş) xəta yox, false */
+const passwordMatches = async (plain, hash) => {
+    if (typeof plain !== 'string' || !accounts.isBcryptHash(hash)) return false;
+    try {
+        return await bcrypt.compare(plain, hash);
+    } catch {
+        return false;
+    }
+};
+
+const phoneTaken = (res) =>
+    res.status(409).json({ success: false, code: 'phone_taken', message: 'Bu nömrə ilə artıq hesab mövcuddur.' });
 
 /**
  * @desc    Telefon nömrəsinə təsdiq kodu (WhatsApp)
@@ -35,15 +62,15 @@ const sendOtp = async (req, res) => {
             return res.status(400).json({ success: false, message: PHONE_FORMAT_MESSAGE });
         }
 
-        const [existingUser] = await pool.execute('SELECT id FROM qr_users WHERE nomre = ?', [nomre]);
-        if (purpose === 'register' && existingUser.length > 0) {
+        const exists = await phoneHasAccount(nomre);
+        if (purpose === 'register' && exists) {
             return res.status(409).json({
                 success: false,
                 code: 'phone_taken',
                 message: 'Bu nömrə ilə artıq hesab mövcuddur.'
             });
         }
-        if (purpose === 'reset' && existingUser.length === 0) {
+        if (purpose === 'reset' && !exists) {
             return res.status(404).json({
                 success: false,
                 code: 'phone_not_found',
@@ -68,8 +95,12 @@ const sendOtp = async (req, res) => {
     }
 };
 
+// ── Köhnə axın (yalnız qr_users) ─────────────────────────────────────────────
+// customer_accounts / qr_users.account_id yoxdursa (vahid hesab söndürülüb — bax: config/qrSchema.js) işləyir.
+// Vahid hesab versiyaları faylın sonundadır (register, login, resetPassword, updateProfile).
+
 /**
- * @desc    QR Menu İstifadəçi Qeydiyyatı
+ * @desc    QR Menu İstifadəçi Qeydiyyatı (köhnə axın)
  * @route   POST /api/qr-auth/register
  * @access  Public
  * Body: { ad, soyad, nomre, sifre, request_id, kod }
@@ -77,7 +108,7 @@ const sendOtp = async (req, res) => {
  * `request_id` + `kod` — POST /otp/send-dən; nömrə təsdiqlənmədən hesab yaradılmır
  * (QR_OTP_REQUIRED=0 olmadıqda). Kod və hesab eyni tranzaksiyadadır.
  */
-const register = async (req, res) => {
+const legacyRegister = async (req, res) => {
     let conn;
     try {
         const { ad, soyad, nomre, sifre, request_id, kod } = req.body;
@@ -204,13 +235,13 @@ const register = async (req, res) => {
 };
 
 /**
- * @desc    QR Menu İstifadəçi Girişi
+ * @desc    QR Menu İstifadəçi Girişi (köhnə axın)
  * @route   POST /api/qr-auth/login
  * @access  Public
  * Body: { nomre, sifre }
  * Qeyd: 'nomre' ölkə kodu ilə birlikdə gəlir (məs: +994501234567)
  */
-const login = async (req, res) => {
+const legacyLogin = async (req, res) => {
     try {
         const { nomre, sifre } = req.body;
 
@@ -282,7 +313,7 @@ const login = async (req, res) => {
 };
 
 /**
- * @desc    Şifrə bərpası — "Şifrəni unutdum"
+ * @desc    Şifrə bərpası — "Şifrəni unutdum" (köhnə axın)
  * @route   POST /api/qr-auth/password/reset
  * @access  Public
  * Body: { nomre, request_id, kod, yeni_sifre }
@@ -291,7 +322,7 @@ const login = async (req, res) => {
  * Cavab login ilə eynidir ({ token, user }) — qonaq dərhal daxil olur.
  * token_version artırılır — digər cihazlardakı bütün sessiyalar bitir.
  */
-const resetPassword = async (req, res) => {
+const legacyResetPassword = async (req, res) => {
     let conn;
     try {
         const { nomre, request_id, kod, yeni_sifre } = req.body;
@@ -405,7 +436,7 @@ const getMe = async (req, res) => {
 };
 
 /**
- * @desc    QR Menu İstifadəçi Profilini Yenilə
+ * @desc    QR Menu İstifadəçi Profilini Yenilə (köhnə axın)
  * @route   PUT /api/qr-auth/update
  * @access  Private (JWT token tələb olunur)
  * Body: { ad?, soyad?, yeni_sifre?, kohne_sifre? }
@@ -413,7 +444,7 @@ const getMe = async (req, res) => {
  * Şifrə dəyişəndə token_version artırılır — digər cihazlardakı sessiyalar bitir;
  * bu cihaz üçün yeni token cavabın kökündə qaytarılır (`token`).
  */
-const updateProfile = async (req, res) => {
+const legacyUpdateProfile = async (req, res) => {
     try {
         const { ad, soyad, yeni_sifre, kohne_sifre } = req.body;
         const userId = req.qrUser.id;
@@ -584,6 +615,333 @@ const sendReview = async (req, res) => {
             success: false,
             message: 'Server xətası baş verdi.'
         });
+    }
+};
+
+// ── Vahid hesab (customer_accounts) ──────────────────────────────────────────
+// Hesab bir telefon nömrəsidir, QR menyu + mobil tətbiq + client.unipos.tech üçün eyni (services/customerAccount.service.js).
+// qr_users güzgüdür: JWT və qr_orders.customer_id onun id-sini daşıyır. Cavab formaları köhnə ilə eynidir.
+
+/**
+ * @desc    QR Menu İstifadəçi Qeydiyyatı
+ * @route   POST /api/qr-auth/register
+ * @access  Public
+ * Body: { ad, soyad, nomre, sifre, request_id, kod, restaurant? }
+ * Hesab customer_accounts-da yaranır (+ qr_users güzgüsü). Nömrənin hesabı artıq varsa (mobil tətbiqdə də açılmış
+ * ola bilər) 409 `phone_taken` — QR menyu girişə yönləndirir. Qeydiyyat formasındakı hüquqi mətnə görə
+ * sms_consent = 1. `restaurant` (URL-dəki istifadəçi adı) — həmin restoranın müştəri bazasına düşür.
+ */
+const register = async (req, res) => {
+    if (!accounts.isReady()) return legacyRegister(req, res);
+    let conn;
+    try {
+        const { ad, soyad, nomre, sifre, request_id, kod, restaurant } = req.body;
+
+        if (!ad || !soyad || !nomre || !sifre) {
+            return res.status(400).json({ success: false, message: 'Ad, soyad, nömrə və şifrə tələb olunur.' });
+        }
+        if (ad.trim().length < 2) {
+            return res.status(400).json({ success: false, message: 'Ad ən azı 2 simvol olmalıdır.' });
+        }
+        if (soyad.trim().length < 2) {
+            return res.status(400).json({ success: false, message: 'Soyad ən azı 2 simvol olmalıdır.' });
+        }
+        if (!isValidPhone(nomre)) {
+            return res.status(400).json({ success: false, message: PHONE_FORMAT_MESSAGE });
+        }
+        if (sifre.length < 6) {
+            return res.status(400).json({ success: false, message: 'Şifrə ən azı 6 simvol olmalıdır.' });
+        }
+
+        const norm = accounts.normalizePhone(nomre);
+        // Kod sərf olunmasın deyə əvvəl yoxlanılır
+        if (await phoneHasAccount(nomre)) return phoneTaken(res);
+
+        const hasOtp = Boolean(request_id || kod);
+        if (isOtpRequired() && !hasOtp) {
+            return res.status(400).json({ success: false, code: 'otp_required', message: 'Telefon nömrəsi təsdiqlənməlidir.' });
+        }
+
+        const hashedSifre = await bcrypt.hash(sifre, 10);
+
+        conn = await pool.getConnection();
+        await conn.beginTransaction();
+
+        if (hasOtp) {
+            const otp = await verifyOtp(conn, { requestId: request_id, nomre, code: kod, purpose: 'register' });
+            await markOtpUsed(conn, otp.id);
+        }
+
+        const account = await accounts.createAccount(conn, {
+            phone: norm,
+            firstName: ad.trim(),
+            lastName: soyad.trim(),
+            passwordHash: hashedSifre,
+            verifiedAt: hasOtp ? 'now' : null,
+            smsConsent: true,
+        });
+        const mirror = await accounts.ensureMirror(conn, account, nomre);
+        await conn.commit();
+        conn.release();
+        conn = null;
+
+        const token = signQrUserToken(mirror);
+        await accounts.joinRestaurant(restaurant, account);
+
+        return res.status(201).json({
+            success: true,
+            message: 'Qeydiyyat uğurla tamamlandı!',
+            data: {
+                token,
+                user: { id: mirror.id, ad: mirror.ad, soyad: mirror.soyad, nomre: mirror.nomre, phone_verified: hasOtp }
+            }
+        });
+
+    } catch (error) {
+        if (conn) {
+            // Səhv kodda cəhd sayı yazılmalıdır — əks halda 5 cəhd limiti işləməzdi
+            if (error instanceof OtpError) await conn.commit().catch(() => {});
+            else await conn.rollback().catch(() => {});
+        }
+        if (error instanceof OtpError) return otpErrorResponse(res, error);
+        // Eyni anda iki qeydiyyat — customer_accounts / qr_users nömrəsi UNIQUE-dir
+        if (error.code === 'ER_DUP_ENTRY') return phoneTaken(res);
+        console.error('QR Register xətası:', error);
+        return res.status(500).json({ success: false, message: 'Server xətası baş verdi.' });
+    } finally {
+        if (conn) conn.release();
+    }
+};
+
+/**
+ * @desc    QR Menu İstifadəçi Girişi
+ * @route   POST /api/qr-auth/login
+ * @access  Public
+ * Body: { nomre, sifre, restaurant? }
+ * Şifrə hesabınkı ilə (customer_accounts.password_hash) yoxlanılır — mobil tətbiqdə qeydiyyatdan keçən də daxil olur
+ * (güzgüsü yoxdursa yaradılır). Hələ köçürülməmiş köhnə QR hesabı öz şifrəsi ilə daxil olur və elə burada köçürülür.
+ * `restaurant` — həmin restoranın müştəri bazasına düşür.
+ */
+const login = async (req, res) => {
+    if (!accounts.isReady()) return legacyLogin(req, res);
+    try {
+        const { nomre, sifre, restaurant } = req.body;
+
+        if (!nomre || !sifre) {
+            return res.status(400).json({ success: false, message: 'Nömrə və şifrə tələb olunur.' });
+        }
+        if (!isValidPhone(nomre)) {
+            return res.status(400).json({ success: false, message: PHONE_FORMAT_MESSAGE });
+        }
+
+        const invalid = () => res.status(401).json({ success: false, message: 'Nömrə və ya şifrə yanlışdır.' });
+        let account = await accounts.accountByPhone(pool, accounts.normalizePhone(nomre));
+        const legacy = await accounts.unlinkedQrUser(pool, nomre);
+
+        // Hesab varsa yalnız onun şifrəsi keçir (hesab əsasdır); yoxdursa köhnə QR hesabının şifrəsi
+        const ok = account ? await passwordMatches(sifre, account.password_hash) : Boolean(legacy) && (await passwordMatches(sifre, legacy.sifre));
+        if (!ok) return invalid();
+
+        if (legacy) account = (await accounts.migrateQrUser(legacy)).account || account;
+        if (!account) return invalid();
+
+        const mirror = await accounts.ensureMirror(pool, account, nomre);
+        const token = signQrUserToken(mirror);
+        await accounts.joinRestaurant(restaurant, account);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Uğurla daxil oldunuz!',
+            data: {
+                token,
+                user: {
+                    id: mirror.id,
+                    ad: mirror.ad,
+                    soyad: mirror.soyad,
+                    nomre: mirror.nomre,
+                    phone_verified: Boolean(mirror.phone_verified_at || account.phone_verified_at)
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('QR Login xətası:', error);
+        return res.status(500).json({ success: false, message: 'Server xətası baş verdi.' });
+    }
+};
+
+/**
+ * @desc    Şifrə bərpası — "Şifrəni unutdum"
+ * @route   POST /api/qr-auth/password/reset
+ * @access  Public
+ * Body: { nomre, request_id, kod, yeni_sifre }
+ * Yeni şifrə hesaba, bu nömrənin şifrəli kartlarına və güzgüyə yazılır; QR tokenləri (token_version) və loyallıq
+ * veb sessiyaları (tətbiq, client.unipos.tech) bitir. Cavab login ilə eynidir ({ token, user }).
+ */
+const resetPassword = async (req, res) => {
+    if (!accounts.isReady()) return legacyResetPassword(req, res);
+    let conn;
+    try {
+        const { nomre, request_id, kod, yeni_sifre } = req.body;
+
+        if (!nomre || !request_id || !kod || !yeni_sifre) {
+            return res.status(400).json({ success: false, message: 'Nömrə, kod və yeni şifrə tələb olunur.' });
+        }
+        if (!isValidPhone(nomre)) {
+            return res.status(400).json({ success: false, message: PHONE_FORMAT_MESSAGE });
+        }
+        if (typeof yeni_sifre !== 'string' || yeni_sifre.length < 6) {
+            return res.status(400).json({ success: false, message: 'Yeni şifrə ən azı 6 simvol olmalıdır.' });
+        }
+
+        // Köçürülməmiş köhnə QR hesabı əvvəlcə hesaba köçürülür — tranzaksiyadan KƏNARDA
+        // (FOR UPDATE-in boşluq kilidi köçürmənin INSERT-ini bloklamasın)
+        const legacy = await accounts.unlinkedQrUser(pool, nomre);
+        if (legacy) await accounts.migrateQrUser(legacy);
+
+        const hashedSifre = await bcrypt.hash(yeni_sifre, 10);
+
+        conn = await pool.getConnection();
+        await conn.beginTransaction();
+
+        const otp = await verifyOtp(conn, { requestId: request_id, nomre, code: kod, purpose: 'reset' });
+
+        const account = await accounts.accountByPhone(conn, accounts.normalizePhone(nomre), { forUpdate: true });
+        if (!account) {
+            await conn.rollback();
+            return res.status(404).json({ success: false, code: 'phone_not_found', message: 'Bu nömrə ilə hesab tapılmadı.' });
+        }
+
+        const mirror = await accounts.ensureMirror(conn, account, nomre);
+        await accounts.setPasswordEverywhere(conn, { account, mirrorId: mirror.id, hash: hashedSifre, verified: true });
+        await markOtpUsed(conn, otp.id);
+        await conn.commit();
+
+        const token = signQrUserToken({ ...mirror, token_version: Number(mirror.token_version) + 1 });
+
+        return res.status(200).json({
+            success: true,
+            message: 'Şifrə yeniləndi!',
+            data: {
+                token,
+                user: { id: mirror.id, ad: mirror.ad, soyad: mirror.soyad, nomre: mirror.nomre, phone_verified: true }
+            }
+        });
+
+    } catch (error) {
+        if (conn) {
+            // Səhv kodda cəhd sayı yazılmalıdır — bax: register
+            if (error instanceof OtpError) await conn.commit().catch(() => {});
+            else await conn.rollback().catch(() => {});
+        }
+        if (error instanceof OtpError) return otpErrorResponse(res, error);
+        console.error('QR ResetPassword xətası:', error);
+        return res.status(500).json({ success: false, message: 'Server xətası baş verdi.' });
+    } finally {
+        if (conn) conn.release();
+    }
+};
+
+/**
+ * @desc    QR Menu İstifadəçi Profilini Yenilə
+ * @route   PUT /api/qr-auth/update
+ * @access  Private (JWT token tələb olunur)
+ * Body: { ad?, soyad?, yeni_sifre?, kohne_sifre? }
+ * Ad / soyad həm də hesabda dəyişir (növbəti restorana qoşulanda bu ad köçürülür). Şifrə dəyişməsi bərpa kimidir:
+ * hesab + şifrəli kartlar + güzgü, köhnə QR tokenləri və loyallıq veb sessiyaları bitir; bu cihaz üçün yeni token
+ * cavabın kökündə qaytarılır (`token`).
+ */
+const updateProfile = async (req, res) => {
+    if (!accounts.isReady()) return legacyUpdateProfile(req, res);
+    let conn;
+    try {
+        const { ad, soyad, yeni_sifre, kohne_sifre } = req.body;
+        const userId = req.qrUser.id;
+
+        if (!ad && !soyad && !yeni_sifre) {
+            return res.status(400).json({ success: false, message: 'Yeniləmək üçün ən azı bir sahə daxil edin.' });
+        }
+
+        let mirror = await accounts.qrUserById(pool, userId);
+        if (!mirror) {
+            return res.status(404).json({ success: false, message: 'İstifadəçi tapılmadı.' });
+        }
+        // Köçürmə hələ çatmayıbsa — indi
+        if (mirror.account_id == null) {
+            const r = await accounts.migrateQrUser(mirror);
+            // Hesabın başqa güzgüsü var (nadir) — bu sətir köhnə qaydada yenilənir
+            if (r.status === 'conflict' || r.status === 'invalid_phone') return legacyUpdateProfile(req, res);
+            mirror = await accounts.qrUserById(pool, userId);
+        }
+        const account = await accounts.accountById(pool, mirror.account_id);
+        if (!account) {
+            return res.status(404).json({ success: false, message: 'İstifadəçi tapılmadı.' });
+        }
+
+        const names = {};
+        if (ad !== undefined) {
+            if (ad.trim().length < 2) {
+                return res.status(400).json({ success: false, message: 'Ad ən azı 2 simvol olmalıdır.' });
+            }
+            names.ad = ad.trim();
+        }
+        if (soyad !== undefined) {
+            if (soyad.trim().length < 2) {
+                return res.status(400).json({ success: false, message: 'Soyad ən azı 2 simvol olmalıdır.' });
+            }
+            names.soyad = soyad.trim();
+        }
+
+        let newHash = null;
+        if (yeni_sifre !== undefined) {
+            if (!kohne_sifre) {
+                return res.status(400).json({ success: false, message: 'Mövcud şifrə tələb olunur.' });
+            }
+            if (!(await passwordMatches(kohne_sifre, account.password_hash))) {
+                return res.status(401).json({ success: false, message: 'Mövcud şifrə yanlışdır.' });
+            }
+            if (yeni_sifre.length < 6) {
+                return res.status(400).json({ success: false, message: 'Yeni şifrə ən azı 6 simvol olmalıdır.' });
+            }
+            newHash = await bcrypt.hash(yeni_sifre, 10);
+        }
+
+        conn = await pool.getConnection();
+        await conn.beginTransaction();
+        if (names.ad !== undefined || names.soyad !== undefined) {
+            await conn.query(
+                `UPDATE customer_accounts SET first_name = COALESCE(?, first_name), last_name = COALESCE(?, last_name),
+                        updated_at = UTC_TIMESTAMP() WHERE id = ?`,
+                [names.ad?.slice(0, 60) ?? null, names.soyad?.slice(0, 60) ?? null, account.id]
+            );
+            await conn.query(
+                'UPDATE qr_users SET ad = COALESCE(?, ad), soyad = COALESCE(?, soyad) WHERE id = ?',
+                [names.ad ?? null, names.soyad ?? null, userId]
+            );
+        }
+        if (newHash) await accounts.setPasswordEverywhere(conn, { account, mirrorId: userId, hash: newHash });
+        await conn.commit();
+
+        const [updated] = await pool.execute(
+            'SELECT id, ad, soyad, nomre, phone_verified_at IS NOT NULL AS phone_verified, token_version, created_at FROM qr_users WHERE id = ?',
+            [userId]
+        );
+        const { token_version, ...user } = updated[0];
+
+        return res.status(200).json({
+            success: true,
+            message: 'Profil uğurla yeniləndi!',
+            data: { ...user, phone_verified: Boolean(user.phone_verified) },
+            // Şifrə dəyişibsə köhnə token artıq keçmir — klient bunu saxlamalıdır
+            ...(newHash ? { token: signQrUserToken({ id: user.id, nomre: user.nomre, token_version }) } : {})
+        });
+
+    } catch (error) {
+        if (conn) await conn.rollback().catch(() => {});
+        console.error('QR UpdateProfile xətası:', error);
+        return res.status(500).json({ success: false, message: 'Server xətası baş verdi.' });
+    } finally {
+        if (conn) conn.release();
     }
 };
 

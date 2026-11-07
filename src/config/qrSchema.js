@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { pool } = require('./database');
+const customerAccounts = require('../services/customerAccount.service');
 
 /**
  * QR sifarişinin və QR menyu hesablarının baza sxemi — server hər işə düşəndə
@@ -11,6 +12,8 @@ const { pool } = require('./database');
  *   - `qr_phone_otps` — nömrə təsdiq kodları, `sql/qr_phone_otps.sql`-dən
  *   - `qr_users.phone_verified_at` — nömrə WhatsApp kodu ilə təsdiqlənibsə
  *   - `qr_users.token_version` — şifrə dəyişəndə artır, köhnə tokenlər keçmir (utils/qrUserToken.js)
+ *   - `qr_users.account_id` (UNIQUE) — vahid müştəri hesabına (customer_accounts) bağlantı; sonra köhnə
+ *     QR hesablarının bir dəfəlik köçürülməsi arxa planda başlayır (services/customerAccount.service.js)
  *   - `profiles.is_qr_order_*`, `profiles.is_qr_landing`, `profiles.is_hotel_mode` — superadmin də eyni sütunları əlavə edir; hansı
  *     birinci işə düşsə, o yaradır
  *
@@ -44,6 +47,9 @@ const QR_USER_COLUMNS = [
     { name: 'phone_verified_at', definition: 'DATETIME NULL DEFAULT NULL' },
     // Şifrə dəyişəndə +1 → bütün köhnə tokenlər (digər cihazlar) etibarsız olur
     { name: 'token_version', definition: 'INT NOT NULL DEFAULT 0' },
+    // Vahid müştəri hesabı (customer_accounts.id, admin backend-in cədvəli). NULL — hələ köçürülməyib.
+    // UNIQUE indeks ayrıca (ensureIndex) — sütun əvvəlki cəhddə yaranıb indeks qalıbsa da tamamlansın
+    { name: 'account_id', definition: 'INT NULL DEFAULT NULL' },
 ];
 
 const IGNORED_DUPLICATES = new Set(['ER_DUP_FIELDNAME', 'ER_DUP_KEYNAME']);
@@ -69,6 +75,22 @@ const ensureColumns = async (table, columns) => {
         } catch (error) {
             if (!IGNORED_DUPLICATES.has(error.code)) throw error;
         }
+    }
+};
+
+/** İndeks yoxdursa yaradılır (`definition` — `UNIQUE INDEX ad (sütun)` kimi ALTER TABLE ADD-in davamı) */
+const ensureIndex = async (table, name, definition) => {
+    const [[{ found }]] = await pool.query(
+        `SELECT COUNT(*) AS found FROM information_schema.STATISTICS
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+        [table, name]
+    );
+    if (Number(found)) return;
+    try {
+        await pool.query(`ALTER TABLE \`${table}\` ADD ${definition}`);
+        console.log(`🛠  ${table}.${name} indeksi əlavə olundu`);
+    } catch (error) {
+        if (!IGNORED_DUPLICATES.has(error.code)) throw error;
     }
 };
 
@@ -142,11 +164,26 @@ async function ensureQrSchema() {
 
     try {
         await ensureColumns('qr_users', QR_USER_COLUMNS);
+        await ensureIndex('qr_users', 'uniq_qr_users_account', 'UNIQUE INDEX `uniq_qr_users_account` (`account_id`)');
         await ensureTable('qr_phone_otps');
         console.log('✅ QR hesab sxemi hazırdır');
     } catch (error) {
         console.error('❌ QR hesab sxemi hazırlanmadı (qeydiyyat / giriş işləməyəcək):', error.message);
     }
+
+    // Vahid hesab (QR + loyallıq). customer_accounts admin backend-indir — yoxdursa QR menyu köhnə qaydada
+    // (yalnız qr_users) işləyir. Köçürmə serveri gözlətmir: arxa planda gedir, xətası yalnız loglanır.
+    try {
+        const ready = await customerAccounts.init();
+        if (ready.accounts) {
+            console.log(`✅ Vahid müştəri hesabı aktivdir (müştəri bazası: ${ready.customers ? 'bəli' : 'XEYR'}, veb sessiyalar: ${ready.sessions ? 'bəli' : 'xeyr'})`);
+            customerAccounts.runMigration().catch((error) => console.error('❌ QR hesab köçürməsi dayandı:', error.message));
+        } else {
+            console.error('❌ Vahid müştəri hesabı söndürülüb: customer_accounts və ya qr_users.account_id yoxdur — QR girişi köhnə qaydada');
+        }
+    } catch (error) {
+        console.error('❌ Vahid müştəri hesabı yoxlanmadı (QR girişi köhnə qaydada):', error.message);
+    }
 }
 
-module.exports = { ensureQrSchema, ensureColumns, ensureTable };
+module.exports = { ensureQrSchema, ensureColumns, ensureTable, ensureIndex };

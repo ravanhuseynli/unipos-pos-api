@@ -58,6 +58,23 @@ Kodda / git-də görünməyən faktlar və səbəblər. Yeni fakt öyrənəndə 
 - `router.param('profileId', checkProfileParam)` — profileId həm rəqəm (id), həm username ola bilər (`/pos/categories/:profileId` və s.).
 - `express-rate-limit` 7.5.1.
 
+## Vahid müştəri hesabı (2026-11-07, R3)
+
+- Kod: `src/services/customerAccount.service.js`; controller-də köhnə handler-lər `legacy*` adı ilə qalır (sxem yoxdursa).
+- `customer_accounts` (admin, `utf8mb4_general_ci`) və `qr_users` (`utf8mb4_unicode_ci`) collation-ları fərqlidir — iki cədvəlin
+  mətn sütunlarını SQL-də `=` ilə müqayisə etmək `Illegal mix of collations` verir. Müqayisə JS-də (heş) və ya id ilə JOIN.
+- `normalizePhone` admin `utils/phone.js`-in hərfi nüsxəsidir. 9 rəqəmli istənilən nömrəyə «994» artırır (xarici 9 rəqəmli
+  E.164 nömrə, məs. Farer, səhv normallaşır) — admin də eynisini edir, ona görə nüsxə dəyişdirilmir; güzgü `nomre`-si
+  normallaşdırılmış formada müqayisə olunur.
+- Admin `utils/password.verifyPassword` heş bcrypt deyilsə DÜZ MƏTN müqayisəsinə düşür — köçürmədə bcrypt olmayan
+  `qr_users.sifre` hesaba köçürülmür (istifadəsiz təsadüfi heş; şifrə bərpa ilə qoyulur).
+- Kassanın (şifrəsiz) `customers` sətrinə veb şifrəsini yalnız nömrəsi təsdiqlənmiş hesab qoyur — köhnə QR hesabları kodsuz
+  yaradılıb, nömrəni hər kəs yaza bilərdi.
+- Hesabı silinmiş güzgü (tətbiqdə «Hesabı sil») `nomre = 'deleted-<id>'`, `account_id = NULL` ilə anonimləşir (həmin nömrə
+  yenidən qeydiyyatdan keçəndə) — köçürmə onları atlayır.
+- Admin backend-in lokal test harness-i: `database/index.js`-i `require.cache` ilə test bazasına yönəldib
+  `services/loyalty/register.globalLogin`-i birbaşa çağırmaq kifayətdir (bütün serveri qaldırmadan).
+
 ## Lokal test (müvəqqəti MariaDB)
 
 ```bash

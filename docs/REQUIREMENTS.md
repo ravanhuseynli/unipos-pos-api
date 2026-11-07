@@ -53,3 +53,20 @@ Məzmun web admin paneldən idarə olunur; otel olmayan restoranlara heç nə d�
 | 13 | Könüllü sütunlar yalnız mövcud olduqda SELECT olunur (`config/menuColumns.js`) | Menyu sorğusu bütün restoranlarındır — deploy ardıcıllığı səhv olsa da düşməsin |
 
 Müqavilə: admin repo `docs/hotel/QR_PORTAL_CONTRACT.md`.
+
+## R3 — Vahid müştəri hesabı: QR menyu + loyallıq (2026-11-07)
+
+QR menyu hesabları ilə loyallıq hesabları (mobil tətbiq, client.unipos.tech) **bir telefon nömrəsi = bir hesab** olur;
+QR menyuda qeydiyyat / giriş müştərini həmin restoranın admin paneldəki müştəri bazasına salır. Bütün sistemlər eyni
+MySQL bazasını işlədir (sahibin təsdiqi).
+
+| # | Qərar | Səbəb |
+|---|---|---|
+| 1 | Əsas hesab admin backend-in `customer_accounts` cədvəlidir; QR qeydiyyat / giriş / bərpa / şifrə dəyişməsi onunla işləyir | Sahibin qərarı — eyni nömrə + şifrə hər yerdə keçsin |
+| 2 | `qr_users` güzgü kimi qalır: `account_id` (UNIQUE) əlavə olundu, `ad/soyad/nomre/sifre` hər yazıda eyniləşdirilir | `qr_orders.customer_id` və QR JWT-si onun id-sini daşıyır; köhnə QR klienti deploy zamanı işləməlidir |
+| 3 | Qeydiyyatda `sms_consent = 1` | Qeydiyyat formasının altında hüquqi mətn (şərtlər, gizlilik, kampaniya mesajlarına razılıq) |
+| 4 | Nömrənin hesabı varsa (tətbiqdə açılıb) qeydiyyat 409 `phone_taken` — QR menyu girişə yönləndirir | Köhnə davranışla eyni |
+| 5 | `register` / `login` — könüllü `restaurant` (URL-dəki istifadəçi adı, `profiles.username`) → həmin filialda `customers` sətri (admin `accountFlow.joinVenue` mənası, mənbə `qr_menu`) | Hər restoranın müştəri bazası; kart (loyallıq) olub-olmaması admin-in qərarıdır |
+| 6 | Server açılanda bir dəfəlik, təkrarlana bilən köçürmə: hesabsız `qr_users` → hesab (bcrypt heşi olduğu kimi, `sms_consent = 0`), sifariş / rəy restoranlarında `customers` sətri | Köhnə qonaqlar razılıq mətnini görməyib; köçürmə serveri gözlətmir |
+| 7 | Şifrə başqa yerdə dəyişəndə / hesab silinəndə QR tokenləri burada bitir (güzgü `sifre` ≠ hesab `password_hash`) | Admin backend-də dəyişiklik olmadan da sessiyalar bitsin |
+| 8 | `customer_accounts` yoxdursa köhnə (yalnız `qr_users`) axın | Admin backend gec deploy olunsa QR girişi düşməsin |

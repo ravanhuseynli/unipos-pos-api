@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { pool } = require('../config/database');
+const customerAccounts = require('../services/customerAccount.service');
 
 /**
  * QR menyu hesabının JWT-si.
@@ -10,6 +11,11 @@ const { pool } = require('../config/database');
  *
  * `tv`-siz köhnə tokenlər 0 sayılır — hesabın versiyası 0 olduqca (şifrə heç
  * dəyişməyib) işləməyə davam edir, deploy heç kimi çıxarmır.
+ *
+ * Vahid hesab (services/customerAccount.service.js): şifrə mobil tətbiqdə / client.unipos.tech-də
+ * dəyişə bilər — orada qr_users-ə toxunulmur. Ona görə güzgünün `sifre`-si hesabın `password_hash`-i
+ * ilə müqayisə olunur: fərqlidirsə (şifrə başqa yerdə dəyişib) və ya hesab silinibsə, versiya burada
+ * artırılır və token rədd olunur — QR sessiyaları da bitir.
  */
 
 class QrSessionError extends Error {
@@ -46,14 +52,29 @@ const verifyQrUserToken = async (token) => {
         throw new QrSessionError('token_invalid', 'Token etibarsızdır.');
     }
 
+    const linked = customerAccounts.isReady();
     const [rows] = await pool.execute(
-        'SELECT id, ad, soyad, nomre, token_version FROM qr_users WHERE id = ? LIMIT 1',
+        linked
+            ? `SELECT q.id, q.ad, q.soyad, q.nomre, q.token_version, q.sifre, q.account_id,
+                      a.id AS acc_id, a.password_hash AS acc_hash
+                 FROM qr_users q LEFT JOIN customer_accounts a ON a.id = q.account_id
+                WHERE q.id = ? LIMIT 1`
+            : 'SELECT id, ad, soyad, nomre, token_version FROM qr_users WHERE id = ? LIMIT 1',
         [decoded.id]
     );
-    const user = rows[0];
-    if (!user || Number(user.token_version) !== (Number(decoded.tv) || 0)) {
-        throw new QrSessionError('session_revoked', 'Sessiya bitib — şifrə dəyişdirilib. Yenidən daxil olun.');
+    const row = rows[0];
+    const revoked = () => new QrSessionError('session_revoked', 'Sessiya bitib — şifrə dəyişdirilib. Yenidən daxil olun.');
+    if (!row || Number(row.token_version) !== (Number(decoded.tv) || 0)) throw revoked();
+
+    if (linked && row.account_id != null && (row.acc_id == null || row.acc_hash !== row.sifre)) {
+        // Şifrə başqa yerdə dəyişib / hesab silinib — bütün köhnə QR tokenləri bitir (şərtli UPDATE: bir dəfə artır)
+        await pool.execute(
+            'UPDATE qr_users SET token_version = token_version + 1, sifre = COALESCE(?, sifre) WHERE id = ? AND token_version = ? AND sifre = ?',
+            [row.acc_hash ?? null, row.id, row.token_version, row.sifre]
+        );
+        throw revoked();
     }
+    const user = { id: row.id, ad: row.ad, soyad: row.soyad, nomre: row.nomre, token_version: row.token_version };
     return { decoded, user };
 };
 

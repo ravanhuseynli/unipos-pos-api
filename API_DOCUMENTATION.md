@@ -629,13 +629,15 @@ Requires `orderId`. Optional parameters: `items` (array), `note`, `discount`, `s
 
 ## 8. QR Menu Authentication Endpoints
 
-These endpoints are used by the **QR Menu mobile app** for customer registration and login. Users are stored in the `qr_users` table. Phone numbers are sent in international E.164 format with the country code (`+994501234567`, `+905321234567`); the QR menu has a country picker. `+994` numbers must have exactly 9 digits after the code.
+These endpoints are used by the **QR Menu mobile app** for customer registration and login. Accounts are **unified with the loyalty customer account** (`customer_accounts`, owned by the admin backend at api.unipos.tech — same database): one phone number = one account, and the same phone + password works in the QR menu, the UniPOS mobile app and client.unipos.tech. `qr_users` stays as a mirror (`qr_users.account_id` → `customer_accounts.id`): the QR JWT and `qr_orders.customer_id` keep using its `id`, and `ad/soyad/nomre/sifre` are kept in sync. Old QR accounts are migrated once, automatically, on server start (`src/services/customerAccount.service.js`). If `customer_accounts` is missing, the endpoints fall back to the old `qr_users`-only behaviour. Phone numbers are sent in international E.164 format with the country code (`+994501234567`, `+905321234567`); the QR menu has a country picker. `+994` numbers must have exactly 9 digits after the code.
 
 Phone ownership is verified with a **6-digit code sent via WhatsApp** (see 8.0). Registration and password reset both require it.
 
 > **Token Type**: QR Menu tokens contain `"type": "qr_user"` in the payload and are separate from Admin tokens.
 
-> **Sessions end on password change**: tokens carry `tv` (= `qr_users.token_version`). A password change (`PUT /qr-auth/update`) or reset (8.6) increments the version, so every older token — other devices included — is rejected with `401` and `code: "session_revoked"`. The device that changed the password gets a fresh `token` in the response. Tokens issued before this feature have no `tv` and count as version 0, so they stay valid until the first password change.
+> **Sessions end on password change**: tokens carry `tv` (= `qr_users.token_version`). A password change (`PUT /qr-auth/update`) or reset (8.6) increments the version, so every older token — other devices included — is rejected with `401` and `code: "session_revoked"`. The device that changed the password gets a fresh `token` in the response. Tokens issued before this feature have no `tv` and count as version 0, so they stay valid until the first password change. A password changed **elsewhere** (mobile app, client.unipos.tech) or a deleted account is detected on the next request (mirror `sifre` ≠ account `password_hash`) and also ends every QR session with `session_revoked`.
+
+> **Restaurant customer base**: `register` and `login` accept an optional `restaurant` (the `[restaurant]` username from the QR menu URL, matched against `profiles.username`; unknown / ambiguous names are ignored). The customer then gets a row in that restaurant's `customers` table (the admin panel's customer list / loyalty card) — the same semantics as the admin's `accountFlow.joinVenue`: an existing row with the same phone is reused (only a missing web password is filled, and only for a verified phone), a new row gets `sms_consent_source = 'qr_menu'`.
 
 ### 8.0 Send Verification Code (WhatsApp OTP)
 Sends a 6-digit code to the phone number via the WhatsApp bot (`WHATSAPP_BOT_URL`, `POST /send-otp`).
@@ -648,7 +650,7 @@ Sends a 6-digit code to the phone number via the WhatsApp bot (`WHATSAPP_BOT_URL
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `nomre` | string | Yes | Phone number in E.164 format. |
-| `purpose` | string | No | `register` (default; number must NOT be registered) or `reset` (number must be registered). |
+| `purpose` | string | No | `register` (default; number must NOT have an account — an account created in the mobile app counts) or `reset` (number must have an account). |
 
 **Success Response (200 OK)**:
 ```json
@@ -693,8 +695,11 @@ Register a new QR menu customer account. Requires a code from 8.0 (`purpose: "re
 | `sifre` | string | Yes | Password (min. 6 characters). Stored as bcrypt hash. |
 | `request_id` | string | Yes* | From 8.0 response. |
 | `kod` | string | Yes* | 6-digit code received on WhatsApp. |
+| `restaurant` | string | No | Restaurant username from the QR menu URL — adds the customer to that restaurant's customer base. |
 
 \* Not required only when `QR_OTP_REQUIRED=0` (transition / bot testing).
+
+Creates the `customer_accounts` row (`sms_consent = 1` — the register form shows the consent line) and its `qr_users` mirror; `user.id` is the mirror id.
 
 **Example Request**:
 ```json
@@ -737,7 +742,7 @@ Register a new QR menu customer account. Requires a code from 8.0 (`purpose: "re
 | `400` | `code: otp_required` | `request_id` / `kod` missing |
 | `400` | `code: otp_wrong` | Wrong code; `attempts_left` included |
 | `400` | `code: otp_blocked` / `otp_expired` / `otp_replaced` / `otp_invalid` | Code can no longer be used — request a new one |
-| `409` | "Bu nömrə ilə artıq hesab mövcuddur." | Phone number already registered |
+| `409` | `code: phone_taken` — "Bu nömrə ilə artıq hesab mövcuddur." | Phone number already has an account (QR menu, mobile app or client.unipos.tech) |
 
 ---
 
@@ -753,6 +758,9 @@ Authenticate a QR menu customer using phone number and password.
 |-----------|------|----------|-------------|
 | `nomre` | string | Yes | Phone number in `+994XXXXXXXXX` format. |
 | `sifre` | string | Yes | Account password. |
+| `restaurant` | string | No | Restaurant username from the QR menu URL — adds the customer to that restaurant's customer base. |
+
+The password is checked against `customer_accounts.password_hash`, so an account registered in the mobile app can sign in (its `qr_users` mirror is created on first login). A not-yet-migrated old QR account signs in with its own password and is migrated on the spot. `user` may also contain `phone_verified` (additive).
 
 **Example Request**:
 ```json
@@ -876,6 +884,7 @@ CREATE TABLE IF NOT EXISTS qr_users (
     sifre       VARCHAR(255)  NOT NULL,           -- bcrypt hash
     phone_verified_at DATETIME NULL,              -- set when verified via WhatsApp code (NULL = old account)
     token_version INT NOT NULL DEFAULT 0,         -- +1 on password change/reset → older tokens rejected
+    account_id  INT NULL UNIQUE,                  -- customer_accounts.id (unified account); NULL = not migrated yet
     created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -903,6 +912,8 @@ Sets a new password using a WhatsApp code from 8.0 (`purpose: "reset"`). Also ma
 **Success Response (200 OK)**: `{ "success": true, "message": "Şifrə yeniləndi!", "data": { "token": "...", "user": { ... } } }`
 
 Errors: the same `otp_*` codes as 8.1, `404 phone_not_found`, `400` for a short password.
+
+The new password is written to the account, to the phone's loyalty cards that already have a web password (`customers.web_password_hash`) and to the mirror; QR tokens (`token_version`) and the loyalty web sessions (`customer_web_sessions`, revoked like the admin's own reset) end. `PUT /qr-auth/update` with a new password does the same; a name change there is also written to the account.
 
 > Password change for a signed-in user is `PUT /qr-auth/update` with `kohne_sifre` + `yeni_sifre`. When the password changes, the response also contains a top-level `token` (the old one is revoked) — clients must store it.
 
