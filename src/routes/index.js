@@ -26,6 +26,8 @@ router.use('/modifiers', modifierRoutes);
 router.use('/qr-auth', qrAuthRoutes);
 router.use('/qr-orders', qrOrderRoutes);
 router.use('/hotel', hotelRoutes);
+// QR story-ləri — bütün restoranlar (açıq, yalnız oxuyur)
+router.get('/qr-stories/:username', require('../controllers/hotel.controller').getQrStories);
 
 // Health check
 router.get('/health', (req, res) => {

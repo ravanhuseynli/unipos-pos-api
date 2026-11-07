@@ -531,6 +531,10 @@ public, max-age=86400`; redirects to the file when `img_file` exists. In hotel m
 
 `GET /pos/menu/:username` products also carry `name_en` / `name_ru` (product name translations) — only when filled.
 
+**`GET /qr-stories/:username`** — *public, any restaurant (hotel mode not required).* `{ "stories": [ … ] }` with the
+same story shape and filter as `/hotel/:username`. Restaurants have no parent-category page, so a `general_category`
+link is rewritten to its first QR-visible category (`link_type: "category"`), or `none` if it has none. `404 { stories: [] }` — unknown profile.
+
 Stories are returned only when active, with an image, and today (Asia/Baku) is within
 `starts_on`–`ends_on` (empty = open). Hero texts are the hotel's own data. Empty
 `instagram`/`facebook`/`tiktok` → the QR app uses the profile's value.
