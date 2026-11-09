@@ -372,7 +372,7 @@ const createOrder = async ({ body, ip, authHeader }) => {
     }
 
     if (!(await isRestaurantOnline(profile.id))) {
-        throw new QrOrderError(409, 'restaurant_offline', 'Restoran hazırda onlayn sifariş qəbul etmir. Ofisianta müraciət edin.');
+        throw new QrOrderError(409, 'restaurant_offline', 'Restoran hazırda onlayn sifariş qəbul etmir.');
     }
 
     // Masalı sifariş masaya görə, masasız isə qonağın IP-sinə görə məhdudlaşır —
