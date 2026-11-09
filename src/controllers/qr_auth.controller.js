@@ -586,10 +586,22 @@ const sendReview = async (req, res) => {
 
         const finalComment = (comment || '').trim();
 
-        await pool.execute(
-            'INSERT INTO reviews (business_name, rating, comment, profile_id, user, user_phone, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())',
-            [business, rating, finalComment, profile_id || null, userName, userPhone]
-        );
+        // Rəyin müəllifi id ilə (R-151): müştərinin «Rəylərim» siyahısı nömrəyə yox, hesaba bağlıdır —
+        // nömrə dəyişəndə rəylər onunla qalır, nömrə başqasına keçəndə yeni sahibə görünmür.
+        // `reviews.qr_user_id` sütununu admin backend yaradır; hələ yoxdursa köhnə INSERT.
+        const values = [business, rating, finalComment, profile_id || null, userName, userPhone];
+        try {
+            await pool.execute(
+                'INSERT INTO reviews (business_name, rating, comment, profile_id, user, user_phone, qr_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())',
+                [...values, userId]
+            );
+        } catch (err) {
+            if (err.code !== 'ER_BAD_FIELD_ERROR') throw err;
+            await pool.execute(
+                'INSERT INTO reviews (business_name, rating, comment, profile_id, user, user_phone, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())',
+                values
+            );
+        }
 
         // İstifadəçiyə cavabı gözlətmədən dərhal göndəririk
         res.status(201).json({
