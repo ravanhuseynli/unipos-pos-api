@@ -9,10 +9,11 @@ const { verifyQrUserToken, QrSessionError } = require('../utils/qrUserToken');
  * Qonaq → POST /api/qr-orders → `qr_orders` (pending) → socket `/pos` →
  * restoranın master kassası → `qr:order:status` → qonağın `order:{uuid}` otağı.
  *
- * Sifariş YALNIZ masa QR-ı ilə verilir (imzalı token) — adi menyudan
- * (`qr.unipos.tech/<restoran>`) sifariş yoxdur. Rejim restoranın icazəsindən:
- *   manual — POS bildirişlərinə düşür, ofisiant təsdiqləyib masaya əlavə edir
- *   direct — birbaşa həmin masaya düşür
+ * Rejim restoranın icazəsindən (superadmin):
+ *   manual — POS bildirişlərinə düşür, ofisiant təsdiqləyib masanı ÖZÜ seçir.
+ *            Ona görə masa QR-ı məcburi deyil: adi menyudan (`qr.unipos.tech/<restoran>`)
+ *            da sifariş vermək olar — masasız (`table_id = 0`) gedir.
+ *   direct — birbaşa həmin masaya düşür, ona görə YALNIZ masa QR-ı ilə (imzalı token).
  * QR menyu hesabı ilə daxil olmuş qonağın məlumatı (`customer`) istəyə bağlıdır.
  *
  * Otaqlar (heç vaxt `emit` hamıya getmir):
@@ -33,7 +34,7 @@ const FINAL_STATUSES = new Set([STATUS.ACCEPTED, STATUS.REJECTED, STATUS.FAILED,
 
 const PENDING_TTL_MINUTES = 15;
 const ACK_TIMEOUT_MS = 10000;
-const ORDER_LIMIT = { count: 5, minutes: 10 }; // bir masadan 10 dəqiqədə ən çox 5 sifariş
+const ORDER_LIMIT = { count: 5, minutes: 10 }; // bir masadan (masasızda bir IP-dən) 10 dəqiqədə ən çox 5 sifariş
 
 const MAX_LINES = 50;
 const MAX_QUANTITY = 99;
@@ -88,6 +89,17 @@ const getProfile = async (profileId) => {
     const [rows] = await pool.execute('SELECT * FROM profiles WHERE id = ? LIMIT 1', [profileId]);
     return rows[0] || null;
 };
+
+/** Masasız (manual) sifariş — restoran QR menyunun ünvanındakı istifadəçi adından */
+const getProfileByUsername = async (username) => {
+    const name = String(username || '').trim();
+    if (!name) return null;
+    const [rows] = await pool.execute('SELECT * FROM profiles WHERE username = ? LIMIT 1', [name]);
+    return rows[0] || null;
+};
+
+const NO_TABLE = { id: 0, name: null };
+const NO_HALL = { id: 0, name: null };
 
 /**
  * QR menyu hesabı (`Authorization: Bearer <qr_user token>`, bax: qr_auth.controller).
@@ -157,6 +169,24 @@ const describeTable = async ({ token, username }) => {
         table,
         hall,
         mode: qrOrderMode(profile),
+        online: await isRestaurantOnline(profile.id),
+    };
+};
+
+/**
+ * Masa QR-ı olmadan açılan menyu üçün: restoranda masasız sifariş mümkündürmü.
+ * `tableless` yalnız `manual` rejimdə true-dur — orada masanı ofisiant seçir.
+ */
+const describeRestaurant = async ({ username }) => {
+    const profile = await getProfileByUsername(username);
+    if (!profile) throw new QrOrderError(404, 'restaurant_not_found', 'Restoran tapılmadı.');
+    const mode = qrOrderMode(profile);
+    return {
+        restaurant: { id: profile.id, username: profile.username, name: profile.restaurant_name },
+        table: null,
+        hall: null,
+        mode,
+        tableless: mode === 'manual',
         online: await isRestaurantOnline(profile.id),
     };
 };
@@ -295,13 +325,34 @@ const findOrder = async (orderUuid) => {
  * Qonağın sifarişini yoxlayır, qiymətləri bazadan hesablayır, `qr_orders`-ə yazır
  * və kassaya göndərir. Kassanın cavabını gözləmir — status socket ilə gəlir.
  */
-const createOrder = async ({ body, ip, authHeader }) => {
-    if (!body?.token) {
+/**
+ * Masa QR-ı varsa masa tokendən, yoxdursa (yalnız `manual` rejim) restoran `r`-dən.
+ * Masasız sifarişdə masanı ofisiant POS-da təsdiqləyəndə seçir.
+ */
+const resolveOrderTarget = async (body) => {
+    if (body?.token) {
+        const target = await resolveTable(body.token, body.r);
+        const mode = qrOrderMode(target.profile);
+        if (!mode) throw new QrOrderError(403, 'qr_order_disabled', 'Bu restoranda QR-dan sifariş aktiv deyil.');
+        return { ...target, mode };
+    }
+
+    const profile = await getProfileByUsername(body?.r);
+    if (!profile) {
         throw new QrOrderError(400, 'table_required', 'Sifariş vermək üçün masadakı QR kodu skan edin.');
     }
-    const { profile, table, hall } = await resolveTable(body.token, body.r);
     const mode = qrOrderMode(profile);
     if (!mode) throw new QrOrderError(403, 'qr_order_disabled', 'Bu restoranda QR-dan sifariş aktiv deyil.');
+    // `direct` sifariş birbaşa masaya yazılır — masa bilinmədən olmaz
+    if (mode !== 'manual') {
+        throw new QrOrderError(400, 'table_required', 'Sifariş vermək üçün masadakı QR kodu skan edin.');
+    }
+    return { profile, table: NO_TABLE, hall: NO_HALL, mode };
+};
+
+const createOrder = async ({ body, ip, authHeader }) => {
+    const { profile, table, hall, mode } = await resolveOrderTarget(body);
+    const tableless = table.id === 0;
     const customer = await resolveCustomer(authHeader);
 
     if (Number(profile.is_menu_block) === 1) throw new QrOrderError(403, 'menu_blocked', 'Menyu hazırda bağlıdır.');
@@ -324,14 +375,18 @@ const createOrder = async ({ body, ip, authHeader }) => {
         throw new QrOrderError(409, 'restaurant_offline', 'Restoran hazırda onlayn sifariş qəbul etmir. Ofisianta müraciət edin.');
     }
 
+    // Masalı sifariş masaya görə, masasız isə qonağın IP-sinə görə məhdudlaşır —
+    // əks halda bütün masasız qonaqlar bir ortaq limiti paylaşardı
     const [[recent]] = await pool.execute(
         `SELECT COUNT(*) AS n FROM qr_orders
-          WHERE profile_id = ? AND table_id = ?
+          WHERE profile_id = ? AND table_id = ? ${tableless ? 'AND guest_ip <=> ?' : ''}
             AND created_at >= NOW() - INTERVAL ${ORDER_LIMIT.minutes} MINUTE`,
-        [profile.id, table.id]
+        tableless ? [profile.id, 0, ip || null] : [profile.id, table.id]
     );
     if (Number(recent.n) >= ORDER_LIMIT.count) {
-        throw new QrOrderError(429, 'too_many_orders', 'Bu masadan çox sifariş göndərildi. Bir az sonra yenidən cəhd edin.');
+        throw new QrOrderError(429, 'too_many_orders', tableless
+            ? 'Çox sifariş göndərildi. Bir az sonra yenidən cəhd edin.'
+            : 'Bu masadan çox sifariş göndərildi. Bir az sonra yenidən cəhd edin.');
     }
 
     const items = await buildOrderItems(profile.id, normalizeLines(body?.items));
@@ -345,9 +400,10 @@ const createOrder = async ({ body, ip, authHeader }) => {
         orderType: 'table',
         mode,
         profileId: Number(profile.id),
-        hallId: hall.id,
+        // Masasız: null — POS bildirişdə "Masa seçilməyib" göstərir, ofisiant masanı seçir
+        hallId: tableless ? null : hall.id,
         hallName: hall.name,
-        tableId: table.id,
+        tableId: tableless ? null : table.id,
         tableName: table.name,
         customer,
         guestCount: Number.isInteger(guestCount) && guestCount > 0 && guestCount < 100 ? guestCount : null,
@@ -473,6 +529,7 @@ module.exports = {
     masterRoom,
     orderRoom,
     describeTable,
+    describeRestaurant,
     createOrder,
     flushPending,
     applyPosStatus,

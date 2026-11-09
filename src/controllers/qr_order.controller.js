@@ -30,9 +30,25 @@ const getTable = async (req, res) => {
 };
 
 /**
+ * @desc    Masa QR-ı olmadan: restoranın sifariş rejimi, masasız sifariş mümkündürmü, onlayndırmı
+ * @route   GET /api/qr-orders/restaurant/:username
+ * @access  Public
+ */
+const getRestaurant = async (req, res) => {
+    try {
+        const data = await qrOrders.describeRestaurant({ username: req.params.username });
+        res.json({ success: true, data });
+    } catch (error) {
+        handleError(res, error, 'QR restaurant');
+    }
+};
+
+/**
  * @desc    QR-dan sifariş — qiymətlər serverdə hesablanır, kassaya socket ilə gedir
  * @route   POST /api/qr-orders
- * @body    { token, r, orderUuid?, note?, guestCount?, items: [{ productId, quantity, comment?, modifiers?: [{ id, count }] }] }
+ * @body    { token?, r, orderUuid?, note?, guestCount?, items: [{ productId, quantity, comment?, modifiers?: [{ id, count }] }] }
+ *          `token` (masa QR-ı) yalnız `manual` rejimdə istəyə bağlıdır — masasız sifarişdə
+ *          masanı ofisiant POS-da seçir. `direct` rejimdə məcburidir.
  *          `Authorization: Bearer <qr_user token>` istəyə bağlıdır — qonağın adı kassaya gedir
  * @access  Public (masa tokeni imzalıdır)
  */
@@ -68,4 +84,4 @@ const getOrder = async (req, res) => {
     }
 };
 
-module.exports = { getTable, createOrder, getOrder };
+module.exports = { getTable, getRestaurant, createOrder, getOrder };
