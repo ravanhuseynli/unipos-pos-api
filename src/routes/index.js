@@ -13,6 +13,7 @@ const modifierRoutes = require('./modifier.routes');
 const qrAuthRoutes = require('./qr_auth.routes');
 const qrOrderRoutes = require('./qr_order.routes');
 const hotelRoutes = require('./hotel.routes');
+const qrGameRoutes = require('./qr_game.routes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -26,6 +27,7 @@ router.use('/modifiers', modifierRoutes);
 router.use('/qr-auth', qrAuthRoutes);
 router.use('/qr-orders', qrOrderRoutes);
 router.use('/hotel', hotelRoutes);
+router.use('/qr-game', qrGameRoutes);
 // QR story-ləri — bütün restoranlar (açıq, yalnız oxuyur)
 router.get('/qr-stories/:username', require('../controllers/hotel.controller').getQrStories);
 

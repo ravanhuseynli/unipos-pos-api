@@ -171,6 +171,16 @@ async function ensureQrSchema() {
         console.error('❌ QR hesab sxemi hazırlanmadı (qeydiyyat / giriş işləməyəcək):', error.message);
     }
 
+    // QR oyunu (services/qrGame.service.js) — qr_game_settings-i admin backend də eyni tərif ilə yaradır
+    try {
+        await ensureTable('qr_game_settings');
+        await ensureTable('qr_game_rounds');
+        await ensureTable('qr_game_points');
+        console.log('✅ QR oyun sxemi hazırdır');
+    } catch (error) {
+        console.error('❌ QR oyun sxemi hazırlanmadı (oyun işləməyəcək):', error.message);
+    }
+
     // Vahid hesab (QR + loyallıq). customer_accounts admin backend-indir — yoxdursa QR menyu köhnə qaydada
     // (yalnız qr_users) işləyir. Köçürmə serveri gözlətmir: arxa planda gedir, xətası yalnız loglanır.
     try {
