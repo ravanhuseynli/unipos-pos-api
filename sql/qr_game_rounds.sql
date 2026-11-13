@@ -4,6 +4,7 @@
 -- Qonaq raundu (customer_id NULL): bitəndə xalı `pending_points`-də gözləyir; qonaq 24 saat ərzində
 -- qeydiyyatdan keçib/daxil olub `claim` edə bilər. claim tokeninin özü saxlanmır — yalnız SHA-256.
 -- status: open | done | claimed | rejected | expired
+-- goal_met — qonaq raundu gündəlik tapşırığı yerinə yetiribmi (bonus claim zamanı yazılır)
 CREATE TABLE IF NOT EXISTS qr_game_rounds (
     id              CHAR(32)     NOT NULL PRIMARY KEY,
     profile_id      INT          NOT NULL,
@@ -18,6 +19,7 @@ CREATE TABLE IF NOT EXISTS qr_game_rounds (
     points          INT          NULL,
     moves_used      SMALLINT     NULL,
     reject_reason   VARCHAR(40)  NULL,
+    goal_met        TINYINT(1)   NULL,
     ip              VARCHAR(45)  NULL,
     started_at      DATETIME     NOT NULL,
     finished_at     DATETIME     NULL,

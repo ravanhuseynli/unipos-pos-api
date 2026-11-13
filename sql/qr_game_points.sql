@@ -1,6 +1,7 @@
 -- QR oyunu: xal jurnalı. Balans = SUM(delta) (customer_id üzrə — customers sətri onsuz da filiala bağlıdır,
 -- ona görə xal hər restoranın özünündür). Xal pul DEYİL: loyalty_ledger-ə (AZN) heç vaxt yazılmır.
 --   earn   — raund (+), uuid `earn:<round_id>`
+--   goal   — gündəlik tapşırığın bonusu (+), uuid `goal:<customer_id>:<Bakı günü YYYY-MM-DD>` — gündə bir dəfə
 --   redeem — mükafata dəyişmə (−), uuid `redeem:<customer_rewards.id>`
 --   adjust — panel düzəlişi (±)
 -- `uuid` UNIQUE — eyni raund iki dəfə xal yazmır.

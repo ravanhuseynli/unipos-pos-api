@@ -14,6 +14,8 @@ const customerAccounts = require('./customerAccount.service');
  *     üzrə (yalnız ilk `daily_rounds` raund) məhduddur. Ən pis halda belə qonaq gündə N × cap xal alır.
  *   • Xal pul deyil, yalnız restoranın təyin etdiyi mükafata dəyişir; ayda `monthly_reward_cap` mükafat.
  *   • Hesablama müştəri sətri `FOR UPDATE` kilidi altında — eyni anda iki sorğu limiti keçə bilməz.
+ *   • Gündəlik tapşırıq ("bu gün 18 donut topla"): tapşırığı server seçir (restoran + Bakı günü), yerinə
+ *     yetirildiyini replay-in `collected`-i göstərir. Bonus gündə bir dəfə — uuid `goal:<müştəri>:<gün>` UNIQUE.
  *
  * Xal hər restoranın özünündür: jurnal `customers.id` üzrədir, customers sətri isə filiala bağlıdır.
  */
@@ -46,6 +48,9 @@ const clampInt = (v, lo, hi, def) => {
     const n = Number.parseInt(v, 10);
     return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : def;
 };
+
+/** Bakı günü 'YYYY-MM-DD' */
+const bakuDay = (now = new Date()) => new Date(now.getTime() + BAKU_OFFSET_MS).toISOString().slice(0, 10);
 
 /** Bakı gününün / ayının başlanğıcı (UTC) */
 function bakuDayStart(now = new Date()) {
@@ -116,9 +121,41 @@ async function loadGame(username) {
         roundPointCap: clampInt(s?.round_point_cap, 1, 100000, 60),
         monthlyRewardCap: clampInt(s?.monthly_reward_cap, 0, 100000, 100),
         tilePack: TILE_PACKS.has(s?.tile_pack) ? s.tile_pack : 'classic',
+        dailyGoalBonus: clampInt(s?.daily_goal_bonus, 0, 1000, 20),
         rewards,
     };
     return { profile, settings };
+}
+
+/**
+ * Günün tapşırığı: restoran + Bakı günü → növ və say (hamı üçün eyni, gün ərzində dəyişmir).
+ * Say 20 gedişdə 15/18/21 — təsadüfi oyunda bir növdən median ~17, p75 ~21 (simulyasiya); gediş sayına mütənasib.
+ * @returns {{ kind, target, bonus, day } | null} bonus 0-dırsa tapşırıq yoxdur
+ */
+function dailyGoal(profileId, settings, now = new Date()) {
+    if (!settings.dailyGoalBonus) return null;
+    const day = bakuDay(now);
+    const h = crypto.createHash('sha256').update(`goal:${profileId}:${day}`).digest();
+    const kind = h[0] % 6;
+    const base = [15, 18, 21][h[1] % 3];
+    return { kind, target: Math.max(5, Math.round((base * settings.moves) / 20)), bonus: settings.dailyGoalBonus, day };
+}
+
+const publicGoal = (g) => (g ? { kind: g.kind, target: g.target, bonus: g.bonus } : null);
+
+/** Bonusu yazır (gündə bir dəfə — uuid UNIQUE). @returns {Promise<boolean>} indi yazıldımı */
+async function creditGoal(conn, { profileId, customerId, roundId, goal, day }) {
+    const [ins] = await conn.query(
+        `INSERT IGNORE INTO qr_game_points (profile_id, customer_id, uuid, kind, delta, round_id, created_at)
+         VALUES (?, ?, ?, 'goal', ?, ?, UTC_TIMESTAMP())`,
+        [profileId, customerId, `goal:${customerId}:${day}`, goal.bonus, roundId]
+    );
+    return ins.affectedRows > 0;
+}
+
+async function goalDoneToday(db, customerId) {
+    const r = await one(db, 'SELECT id FROM qr_game_points WHERE uuid = ? LIMIT 1', [`goal:${customerId}:${bakuDay()}`]);
+    return Boolean(r);
 }
 
 async function requireGame(username) {
@@ -149,6 +186,7 @@ async function publicInfo(username) {
         score_per_point: s.scorePerPoint,
         round_point_cap: s.roundPointCap,
         tile_pack: s.tilePack,
+        daily_goal: publicGoal(dailyGoal(game.profile.id, s)),
         rewards: publicRewards(s.rewards),
     };
 }
@@ -284,15 +322,21 @@ async function finishRound(roundId, body, qrUser) {
     if (!game) throw new GameError(404, 'not_found');
     const { settings } = game;
     const earned = settings.enabled ? pointsFor(result.score, settings) : 0;
+    const goal = settings.enabled ? dailyGoal(round.profile_id, settings) : null;
+    const got = goal ? result.collected[goal.kind] || 0 : 0;
+    const met = Boolean(goal && got >= goal.target);
+    const goalOut = (awarded) => (goal ? { ...publicGoal(goal), got, met, awarded } : null);
 
     if (!round.customer_id) {
         const [upd] = await pool.query(
-            `UPDATE qr_game_rounds SET status = 'done', score = ?, pending_points = ?, moves_used = ?, finished_at = UTC_TIMESTAMP()
+            `UPDATE qr_game_rounds SET status = 'done', score = ?, pending_points = ?, moves_used = ?, goal_met = ?,
+                    finished_at = UTC_TIMESTAMP()
               WHERE id = ? AND status = 'open'`,
-            [result.score, earned, result.moves, roundId]
+            [result.score, earned, result.moves, met ? 1 : 0, roundId]
         );
         if (!upd.affectedRows) throw new GameError(409, 'round_closed');
-        return { score: result.score, points: 0, pending_points: earned, claimable: earned > 0 };
+        // Qonağın bonusu da xalı kimi girişdən sonra (claim) yazılır
+        return { score: result.score, points: 0, pending_points: earned, claimable: earned > 0 || met, goal: goalOut(false) };
     }
 
     // Girişli raund: token sahibi raundun müştərisi olmalıdır
@@ -311,11 +355,19 @@ async function finishRound(roundId, body, qrUser) {
         const credited = settings.enabled
             ? await creditRound(conn, { profileId: round.profile_id, customerId, roundId, points: earned, settings })
             : 0;
-        await conn.query('UPDATE qr_game_rounds SET points = ? WHERE id = ?', [credited, roundId]);
+        await conn.query('UPDATE qr_game_rounds SET points = ?, goal_met = ? WHERE id = ?', [credited, met ? 1 : 0, roundId]);
+        const awarded = met ? await creditGoal(conn, { profileId: round.profile_id, customerId, roundId, goal, day: goal.day }) : false;
         const balance = await balanceOf(conn, customerId);
         const left = Math.max(0, settings.dailyRounds - (await earnedRoundsToday(conn, customerId)));
         await conn.commit();
-        return { score: result.score, points: credited, balance, earning_left: left, limit_reached: earned > 0 && credited === 0 };
+        return {
+            score: result.score,
+            points: credited,
+            balance,
+            earning_left: left,
+            limit_reached: earned > 0 && credited === 0,
+            goal: goalOut(awarded),
+        };
     } catch (err) {
         await conn.rollback().catch(() => {});
         throw err;
@@ -342,7 +394,8 @@ async function claimRounds(username, items, qrUser) {
             if (!/^[0-9a-f]{32}$/.test(String(it?.id)) || typeof it?.claim_token !== 'string') continue;
             const round = await one(
                 conn,
-                `SELECT * FROM qr_game_rounds WHERE id = ? AND profile_id = ? AND status = 'done' AND customer_id IS NULL
+                `SELECT *, DATE_FORMAT(finished_at + INTERVAL 4 HOUR, '%Y-%m-%d') AS baku_day
+                   FROM qr_game_rounds WHERE id = ? AND profile_id = ? AND status = 'done' AND customer_id IS NULL
                     AND finished_at >= UTC_TIMESTAMP() - INTERVAL ${CLAIM_TTL_HOURS} HOUR FOR UPDATE`,
                 [it.id, profile.id]
             );
@@ -359,6 +412,13 @@ async function claimRounds(username, items, qrUser) {
                 [customerId, credited, round.id]
             );
             total += credited;
+            // Tapşırığı raundun bitdiyi günün bonusu kimi (həmin gün artıq alınıbsa — yox)
+            if (Number(round.goal_met) === 1 && settings.dailyGoalBonus) {
+                const goal = { bonus: settings.dailyGoalBonus };
+                if (await creditGoal(conn, { profileId: profile.id, customerId, roundId: round.id, goal, day: round.baku_day })) {
+                    total += goal.bonus;
+                }
+            }
         }
         const balance = await balanceOf(conn, customerId);
         await conn.commit();
@@ -381,7 +441,7 @@ function titleTr(tiers, titleAz) {
 async function myState(username, qrUser) {
     const { profile, settings } = await requireGame(username);
     const customerId = await customerFor(qrUser, profile);
-    const [balance, used, best, rewards] = await Promise.all([
+    const [balance, used, best, rewards, goalDone] = await Promise.all([
         balanceOf(pool, customerId),
         earnedRoundsToday(pool, customerId),
         one(pool, "SELECT MAX(score) AS s FROM qr_game_rounds WHERE customer_id = ? AND profile_id = ? AND status IN ('done', 'claimed')", [customerId, profile.id]),
@@ -395,10 +455,12 @@ async function myState(username, qrUser) {
               ORDER BY created_at DESC LIMIT 20`,
             [customerId, profile.id]
         ),
+        goalDoneToday(pool, customerId),
     ]);
     return {
         balance,
         earning_left: Math.max(0, settings.dailyRounds - used),
+        goal_done: goalDone,
         best: Number(best?.s) || 0,
         rewards: rewards.map((r) => ({
             id: Number(r.id),
@@ -480,5 +542,5 @@ module.exports = {
     myState,
     redeem,
     // test üçün
-    _internal: { pointsFor, bakuDayStart, bakuMonthStart, normalizeRewards },
+    _internal: { pointsFor, bakuDayStart, bakuMonthStart, bakuDay, dailyGoal, normalizeRewards },
 };

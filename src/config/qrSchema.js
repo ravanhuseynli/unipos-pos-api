@@ -57,6 +57,14 @@ const QR_USER_COLUMNS = [
 const QR_GAME_SETTINGS_COLUMNS = [
     // Daş dəsti: classic (burger, pizza…) | sushi | national | coffee — QR lib/game/packs.js
     { name: 'tile_pack', definition: "VARCHAR(16) NOT NULL DEFAULT 'classic'" },
+    // Gündəlik tapşırığın bonusu (xal); 0 — tapşırıq yoxdur
+    { name: 'daily_goal_bonus', definition: 'INT NOT NULL DEFAULT 20' },
+];
+
+// `sql/qr_game_rounds.sql`-ə sonradan əlavə olunanlar
+const QR_GAME_ROUND_COLUMNS = [
+    // Qonaq raundu gündəlik tapşırığı yerinə yetiribmi — bonus claim zamanı yazılır
+    { name: 'goal_met', definition: 'TINYINT(1) NULL DEFAULT NULL' },
 ];
 
 const IGNORED_DUPLICATES = new Set(['ER_DUP_FIELDNAME', 'ER_DUP_KEYNAME']);
@@ -183,6 +191,7 @@ async function ensureQrSchema() {
         await ensureTable('qr_game_settings');
         await ensureColumns('qr_game_settings', QR_GAME_SETTINGS_COLUMNS);
         await ensureTable('qr_game_rounds');
+        await ensureColumns('qr_game_rounds', QR_GAME_ROUND_COLUMNS);
         await ensureTable('qr_game_points');
         console.log('✅ QR oyun sxemi hazırdır');
     } catch (error) {

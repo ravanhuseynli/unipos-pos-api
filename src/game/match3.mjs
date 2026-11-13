@@ -13,7 +13,7 @@
  * Gediş: [r1, c1, r2, c2] — qonşu iki xananın yerdəyişməsi.
  */
 
-export const ENGINE_VERSION = 1;
+export const ENGINE_VERSION = 2; // 2 — `collected` (gündəlik tapşırıq üçün növ üzrə təmizlənən daşlar)
 
 export const SP = { NONE: 0, ROW: 1, COL: 2, BOMB: 3, COLOR: 4 };
 export const ANY = 99;
@@ -67,7 +67,12 @@ const colOf = (st, i) => i % st.w;
 const inside = (st, r, c) => r >= 0 && c >= 0 && r < st.h && c < st.w;
 
 function clone(st) {
-    return { ...st, rng: st.rng.slice(), cells: st.cells.map((x) => (x ? { ...x } : null)) };
+    return { ...st, rng: st.rng.slice(), cells: st.cells.map((x) => (x ? { ...x } : null)), collected: st.collected.slice() };
+}
+
+/** Təmizlənən adi növ daşı sayılır (gündəlik tapşırıq) — rəngli bomba (ANY) sayılmır */
+function collect(st, cell) {
+    if (cell.k >= 0 && cell.k < st.kinds) st.collected[cell.k] += 1;
 }
 
 function spawn(st, k = null) {
@@ -222,6 +227,7 @@ function removeCells(st, cleared) {
     [...cleared].sort((a, b) => a - b).forEach((i) => {
         const cell = st.cells[i];
         out.push({ id: cell.id, r: rowOf(st, i), c: colOf(st, i), k: cell.k, s: cell.s });
+        collect(st, cell);
         st.cells[i] = null;
     });
     return out;
@@ -363,6 +369,7 @@ export function createGame(seed, opts = {}) {
         movesLeft: o.moves,
         movesMade: 0,
         best: { cascade: 0, specials: 0 },
+        collected: new Array(o.kinds).fill(0), // növ üzrə təmizlənən daşlar
     };
     for (let i = 0; i < 12; i++) next(st.rng); // seed-in ilk dəyərləri zəif qarışır
     fill(st);
@@ -477,6 +484,7 @@ export function applyMove(prev, move) {
         const madeCells = created.map((sp) => {
             const old = st.cells[sp.at];
             removed.push({ id: old.id, r: rowOf(st, sp.at), c: colOf(st, sp.at), k: old.k, s: old.s, into: true });
+            collect(st, old);
             const cell = { id: st.nextId++, k: sp.k, s: sp.s };
             st.cells[sp.at] = cell;
             return { id: cell.id, r: rowOf(st, sp.at), c: colOf(st, sp.at), k: cell.k, s: cell.s, from: old.id };
@@ -504,7 +512,7 @@ export function applyMove(prev, move) {
 
 /**
  * Server tərəfi: raundu baştan oynayır. Hər gediş etibarlı olmalıdır (klient etibarsız gedişi göndərmir).
- * @returns {{ ok: true, score, moves, cascade, specials } | { ok: false, error, at? }}
+ * @returns {{ ok: true, score, moves, cascade, specials, collected } | { ok: false, error, at? }}
  */
 export function replay(seed, opts, moves) {
     if (!Array.isArray(moves)) return { ok: false, error: 'bad_moves' };
@@ -515,7 +523,7 @@ export function replay(seed, opts, moves) {
         if (!res.ok) return { ok: false, error: 'invalid_move', at: i };
         st = res.state;
     }
-    return { ok: true, score: st.score, moves: st.movesMade, cascade: st.best.cascade, specials: st.best.specials };
+    return { ok: true, score: st.score, moves: st.movesMade, cascade: st.best.cascade, specials: st.best.specials, collected: st.collected.slice() };
 }
 
 /** Taxtanı ekrana vermək üçün: [{ id, r, c, k, s }] */
