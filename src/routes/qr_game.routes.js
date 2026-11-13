@@ -19,6 +19,7 @@ router.post('/:username/rounds', playLimiter, c.optionalAuth, c.start);
 router.post('/rounds/:id/finish', playLimiter, c.optionalAuth, c.finish);
 router.post('/:username/claim', qrAuthMiddleware, c.claim);
 router.get('/:username/me', qrAuthMiddleware, c.me);
+router.get('/:username/leaderboard', c.optionalAuth, c.leaderboard);
 router.post('/:username/redeem', qrAuthMiddleware, c.redeem);
 
 module.exports = router;

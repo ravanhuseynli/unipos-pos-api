@@ -57,6 +57,12 @@ function bakuDayStart(now = new Date()) {
     const local = new Date(now.getTime() + BAKU_OFFSET_MS);
     return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()) - BAKU_OFFSET_MS);
 }
+/** Bakı həftəsinin (bazar ertəsi 00:00) başlanğıcı (UTC) */
+function bakuWeekStart(now = new Date()) {
+    const day = bakuDayStart(now);
+    const weekday = (new Date(day.getTime() + BAKU_OFFSET_MS).getUTCDay() + 6) % 7; // 0 — bazar ertəsi
+    return new Date(day.getTime() - weekday * 24 * 3600 * 1000);
+}
 function bakuMonthStart(now = new Date()) {
     const local = new Date(now.getTime() + BAKU_OFFSET_MS);
     return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), 1) - BAKU_OFFSET_MS);
@@ -122,6 +128,7 @@ async function loadGame(username) {
         monthlyRewardCap: clampInt(s?.monthly_reward_cap, 0, 100000, 100),
         tilePack: TILE_PACKS.has(s?.tile_pack) ? s.tile_pack : 'classic',
         dailyGoalBonus: clampInt(s?.daily_goal_bonus, 0, 1000, 20),
+        leaderboard: s?.leaderboard === undefined || s?.leaderboard === null ? true : Number(s.leaderboard) === 1,
         rewards,
     };
     return { profile, settings };
@@ -187,6 +194,7 @@ async function publicInfo(username) {
         round_point_cap: s.roundPointCap,
         tile_pack: s.tilePack,
         daily_goal: publicGoal(dailyGoal(game.profile.id, s)),
+        leaderboard: s.leaderboard,
         rewards: publicRewards(s.rewards),
     };
 }
@@ -475,6 +483,66 @@ async function myState(username, qrUser) {
     };
 }
 
+// ── Həftəlik reytinq ─────────────────────────────────────────────────────────
+
+/** "Rəvan Hüseynli" → "Rəvan H." — reytinq hamıya görünür, soyad tam göstərilmir */
+function shortName(full) {
+    const parts = String(full || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '';
+    const first = parts[0].slice(0, 20);
+    // İkinci söz — soyad və ya ata adı ("Ayşən Məmməd qızı" → "Ayşən M."), sonuncu "qızı/oğlu" ola bilər
+    return parts.length > 1 ? `${first} ${parts[1].charAt(0).toLocaleUpperCase('az')}.` : first;
+}
+
+/**
+ * Bu həftənin (Bakı, bazar ertəsindən) ən yaxşı 10 oyunçusu — hər müştərinin ən yaxşı raundu.
+ * Yalnız hesabı olanlar (qonaq raundu claim olunanda sahibinə keçir). Girişli soruşanda öz yeri də.
+ */
+async function leaderboard(username, qrUser) {
+    const { profile, settings } = await requireGame(username);
+    if (!settings.leaderboard) return { enabled: false, top: [], me: null };
+    const since = sqlUtc(bakuWeekStart());
+    const base = `FROM qr_game_rounds r
+                  WHERE r.profile_id = ? AND r.customer_id IS NOT NULL AND r.status IN ('done', 'claimed') AND r.finished_at >= ?`;
+    const top = await rows(
+        pool,
+        `SELECT t.customer_id, t.best, c.name
+           FROM (SELECT r.customer_id, MAX(r.score) AS best, MIN(r.finished_at) AS first_at ${base} GROUP BY r.customer_id) t
+           JOIN customers c ON c.id = t.customer_id
+          ORDER BY t.best DESC, t.first_at ASC
+          LIMIT 10`,
+        [profile.id, since]
+    );
+
+    let customerId = null;
+    let me = null;
+    if (qrUser) {
+        customerId = await customerFor(qrUser, profile);
+        const mine = await one(pool, `SELECT MAX(r.score) AS best ${base} AND r.customer_id = ?`, [profile.id, since, customerId]);
+        const best = Number(mine?.best) || 0;
+        if (best > 0) {
+            const above = await one(
+                pool,
+                `SELECT COUNT(*) AS n FROM (SELECT r.customer_id, MAX(r.score) AS best ${base} GROUP BY r.customer_id) t WHERE t.best > ?`,
+                [profile.id, since, best]
+            );
+            me = { rank: Number(above.n) + 1, score: best };
+        }
+    }
+
+    return {
+        enabled: true,
+        week_start: bakuWeekStart().toISOString(),
+        top: top.map((r, i) => ({
+            rank: i + 1,
+            name: shortName(r.name),
+            score: Number(r.best) || 0,
+            me: customerId !== null && Number(r.customer_id) === Number(customerId),
+        })),
+        me,
+    };
+}
+
 async function redeem(username, rewardKey, qrUser) {
     const { profile, settings } = await requireGame(username);
     const tier = settings.rewards.find((r) => r.id === String(rewardKey || ''));
@@ -540,7 +608,8 @@ module.exports = {
     finishRound,
     claimRounds,
     myState,
+    leaderboard,
     redeem,
     // test üçün
-    _internal: { pointsFor, bakuDayStart, bakuMonthStart, bakuDay, dailyGoal, normalizeRewards },
+    _internal: { pointsFor, bakuDayStart, bakuWeekStart, bakuMonthStart, bakuDay, dailyGoal, shortName, normalizeRewards },
 };

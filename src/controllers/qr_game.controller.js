@@ -45,5 +45,6 @@ module.exports = {
     finish: wrap('finish', (req) => qrGame.finishRound(req.params.id, req.body, req.qrUser)),
     claim: wrap('claim', (req) => qrGame.claimRounds(req.params.username, req.body?.rounds, req.qrUser)),
     me: wrap('me', (req) => qrGame.myState(req.params.username, req.qrUser)),
+    leaderboard: wrap('leaderboard', (req) => qrGame.leaderboard(req.params.username, req.qrUser)),
     redeem: wrap('redeem', (req) => qrGame.redeem(req.params.username, req.body?.reward, req.qrUser)),
 };

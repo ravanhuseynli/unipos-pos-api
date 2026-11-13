@@ -59,6 +59,8 @@ const QR_GAME_SETTINGS_COLUMNS = [
     { name: 'tile_pack', definition: "VARCHAR(16) NOT NULL DEFAULT 'classic'" },
     // Gündəlik tapşırığın bonusu (xal); 0 — tapşırıq yoxdur
     { name: 'daily_goal_bonus', definition: 'INT NOT NULL DEFAULT 20' },
+    // Həftəlik reytinq (GET /qr-game/:u/leaderboard) — 0 olanda QR-da görünmür
+    { name: 'leaderboard', definition: 'TINYINT(1) NOT NULL DEFAULT 1' },
 ];
 
 // `sql/qr_game_rounds.sql`-ə sonradan əlavə olunanlar
