@@ -52,6 +52,13 @@ const QR_USER_COLUMNS = [
     { name: 'account_id', definition: 'INT NULL DEFAULT NULL' },
 ];
 
+// `sql/qr_game_settings.sql`-ə sonradan əlavə olunanlar — admin backend də eyni sütunları əlavə edir
+// (backend/index.js ensureQrGameSchema); hansı birinci işə düşsə, o yaradır
+const QR_GAME_SETTINGS_COLUMNS = [
+    // Daş dəsti: classic (burger, pizza…) | sushi | national | coffee — QR lib/game/packs.js
+    { name: 'tile_pack', definition: "VARCHAR(16) NOT NULL DEFAULT 'classic'" },
+];
+
 const IGNORED_DUPLICATES = new Set(['ER_DUP_FIELDNAME', 'ER_DUP_KEYNAME']);
 
 const ensureColumns = async (table, columns) => {
@@ -174,6 +181,7 @@ async function ensureQrSchema() {
     // QR oyunu (services/qrGame.service.js) — qr_game_settings-i admin backend də eyni tərif ilə yaradır
     try {
         await ensureTable('qr_game_settings');
+        await ensureColumns('qr_game_settings', QR_GAME_SETTINGS_COLUMNS);
         await ensureTable('qr_game_rounds');
         await ensureTable('qr_game_points');
         console.log('✅ QR oyun sxemi hazırdır');

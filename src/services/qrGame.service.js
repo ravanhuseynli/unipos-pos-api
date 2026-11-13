@@ -27,6 +27,8 @@ const IP_ROUNDS_PER_HOUR = 60;
 const BAKU_OFFSET_MS = 4 * 3600 * 1000; // Azərbaycan — UTC+4, yay vaxtı yoxdur
 
 const REWARD_TYPES = new Set(['free_product', 'percent']);
+// Daş dəstləri — şəkillər QR-dadır (lib/game/packs.js); mühərrikə təsiri yoxdur, yalnız görünüş
+const TILE_PACKS = new Set(['classic', 'sushi', 'national', 'coffee']);
 
 class GameError extends Error {
     constructor(status, code, message) {
@@ -113,6 +115,7 @@ async function loadGame(username) {
         scorePerPoint: clampInt(s?.score_per_point, 10, 100000, 100),
         roundPointCap: clampInt(s?.round_point_cap, 1, 100000, 60),
         monthlyRewardCap: clampInt(s?.monthly_reward_cap, 0, 100000, 100),
+        tilePack: TILE_PACKS.has(s?.tile_pack) ? s.tile_pack : 'classic',
         rewards,
     };
     return { profile, settings };
@@ -145,6 +148,7 @@ async function publicInfo(username) {
         daily_rounds: s.dailyRounds,
         score_per_point: s.scorePerPoint,
         round_point_cap: s.roundPointCap,
+        tile_pack: s.tilePack,
         rewards: publicRewards(s.rewards),
     };
 }
