@@ -5,7 +5,9 @@ const path = require('path');
 const { createSession, verifySession, revokeSession } = require('../services/terminalSession.service');
 const { POS_AUTH_MODE } = require('../middleware/pos_auth.middleware');
 
-const UPLOADS_BASE = '/root/new-unipos-backend';
+// Loqo/fon faylları admin backend-in qovluğundadır (profiles.logo = "/uploads/...").
+// Yeni serverdə yol fərqlidir → .env UPLOADS_DIR; yoxdursa köhnə serverin yolu.
+const UPLOADS_BASE = process.env.UPLOADS_DIR || '/root/new-unipos-backend';
 
 const MIME_TYPES = {
     '.jpg': 'image/jpeg',
